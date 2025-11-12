@@ -1,0 +1,11 @@
+Dataset: gokhankocmarli/inline-digital-holography
+Data Files:
+- Training: https://huggingface.co/datasets/gokhankocmarli/inline-digital-holography/resolve/main/data/000000-014999.tar.gz
+- Testing: https://huggingface.co/datasets/gokhankocmarli/inline-digital-holography/resolve/main/data/060000-074999.tar.gz 
+Model from: microsoft/swin-tiny-patch4-window7-224
+Samples:
+- Training: 12000
+- Validation: 3000
+- Test: 2000
+Epochs: 5
+Batch Size: 8

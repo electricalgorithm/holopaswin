@@ -1,0 +1,24 @@
+Total Images: 15000
+Training Set: 12000 images
+Validation Set: 3000 images
+
+=== Epoch 1/5 ===
+Done. Train Loss: 0.0112 | Val Loss: 0.0071
+--> Best model saved!
+
+=== Epoch 2/5 ===
+Done. Train Loss: 0.0061 | Val Loss: 0.0056
+--> Best model saved!
+
+=== Epoch 3/5 ===
+Done. Train Loss: 0.0050 | Val Loss: 0.0049
+--> Best model saved!
+
+=== Epoch 4/5 ===
+Done. Train Loss: 0.0045 | Val Loss: 0.0043
+--> Best model saved!
+
+=== Epoch 5/5 ===
+Done. Train Loss: 0.0042 | Val Loss: 0.0041
+--> Best model saved!
+

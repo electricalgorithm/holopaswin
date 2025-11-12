@@ -1,0 +1,112 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "holopaswin"
+version = "0.1.0"
+description = "Physics-Aware Swin Transformer for eliminating twin-image artifacts in in-line holography"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "Gökhan Koçmarlı", email = "hello@gyokhan.com"}
+]
+keywords = [
+    "holography",
+    "deep-learning",
+    "computer-vision",
+    "physics-aware",
+    "swin-transformer",
+    "twin-image",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Image Processing",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+dependencies = [
+    "torch>=2.0.0",
+    "torchvision>=0.15.0",
+    "numpy>=1.24.0",
+    "timm>=1.0.0",
+    "scikit-image>=0.20.0",
+    "matplotlib>=3.7.0",
+    "tqdm>=4.65.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.14.0",
+    "mypy>=1.0.0",
+]
+jupyter = [
+    "jupyter>=1.0.0",
+    "ipykernel>=6.0.0",
+    "notebook>=6.5.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+ignore = [
+    "T201",  # Use `logger.info` instead of `print`
+    "E501",  # line too long (handled by formatter)
+    "B008",  # do not perform function calls in argument defaults
+    "D213",
+    "D203",
+    "D413",
+    "COM812", # Formatter will handle this
+    "PTH207", # OK to use glob
+    "PTH118", # OK to use os path join.
+    "PTH110",
+    "EM102",
+    "TRY003",
+    "NPY002",
+    "FBT002",
+    "FBT001",
+    "RET504",
+]
+select = [
+    "ALL",
+]
+fixable = ["ALL"]
+unfixable = []
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+docstring-code-format = false
+docstring-code-line-length = "dynamic"
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+check_untyped_defs = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+strict_equality = true
+
+[[tool.mypy.overrides]]
+module = [
+    "torchvision.*",
+]
+ignore_missing_imports = true
+

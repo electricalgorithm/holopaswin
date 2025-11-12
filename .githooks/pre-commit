@@ -1,0 +1,75 @@
+#!/bin/bash
+#
+# Pre-commit hook to run code quality checks
+# Runs ruff check, ruff format check, and mypy --strict on src/
+
+set -e
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+echo -e "${GREEN}Running pre-commit checks...${NC}"
+
+# Activate virtual environment if it exists
+if [ -f ".venv/bin/activate" ]; then
+    echo "Activating virtual environment..."
+    source .venv/bin/activate
+else
+    echo -e "${YELLOW}Warning: .venv/bin/activate not found. Using system Python.${NC}"
+fi
+
+# Check if ruff is available
+if ! command -v ruff &> /dev/null; then
+    echo -e "${RED}Error: ruff is not installed or not in PATH${NC}"
+    exit 1
+fi
+
+# Check if mypy is available
+if ! command -v mypy &> /dev/null; then
+    echo -e "${RED}Error: mypy is not installed or not in PATH${NC}"
+    exit 1
+fi
+
+# Track if any check fails
+FAILED=0
+
+# Run ruff check
+echo -e "\n${GREEN}[1/3] Running ruff check on src/...${NC}"
+if ! ruff check src/; then
+    echo -e "${RED}✗ ruff check failed${NC}"
+    FAILED=1
+else
+    echo -e "${GREEN}✓ ruff check passed${NC}"
+fi
+
+# Run ruff format check
+echo -e "\n${GREEN}[2/3] Running ruff format check on src/...${NC}"
+if ! ruff format --check src/; then
+    echo -e "${RED}✗ ruff format check failed (files need formatting)${NC}"
+    echo -e "${YELLOW}Run 'ruff format src/' to fix formatting issues${NC}"
+    FAILED=1
+else
+    echo -e "${GREEN}✓ ruff format check passed${NC}"
+fi
+
+# Run mypy --strict
+echo -e "\n${GREEN}[3/3] Running mypy --strict on src/...${NC}"
+if ! mypy --strict src/; then
+    echo -e "${RED}✗ mypy --strict failed${NC}"
+    FAILED=1
+else
+    echo -e "${GREEN}✓ mypy --strict passed${NC}"
+fi
+
+# Exit with appropriate code
+if [ $FAILED -eq 1 ]; then
+    echo -e "\n${RED}Pre-commit checks failed. Please fix the issues above before committing.${NC}"
+    exit 1
+else
+    echo -e "\n${GREEN}All pre-commit checks passed!${NC}"
+    exit 0
+fi
+

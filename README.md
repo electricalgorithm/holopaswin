@@ -1,8 +1,6 @@
 # HoloPASWIN: In-Line Holographical Physics-Aware SWIN Transformer
 
-A research-grade deep learning project for eliminating the **twin-image problem in in-line holography** using a **physics-aware Swin-UNet architecture** trained with synthetic holograms generated via the Angular Spectrum Method.
-
-Build a modern, high-performing, physics-aware neural architecture capable of reconstructing complex object fields ( $\hat{O} = \hat{O}_{real} + i\hat{O}_{imag}$ ) from inline holograms while robustly suppressing **twin-image artifacts**, **noise**, and **aberrations**.
+A deep learning project for eliminating the **twin-image problem in in-line holography** using a **physics-aware Swin-UNet architecture** trained with synthetic holograms generated via the Angular Spectrum Method.
 
 ## Development Setup
 

@@ -1,4 +1,4 @@
-# HOLO-PASWIN: In-Line Holographical Physics-Aware SWIN Transformer
+# HoloPASWIN: In-Line Holographical Physics-Aware SWIN Transformer
 
 A research-grade deep learning project for eliminating the **twin-image problem in in-line holography** using a **physics-aware Swin-UNet architecture** trained with synthetic holograms generated via the Angular Spectrum Method.
 

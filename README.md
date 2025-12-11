@@ -1,8 +1,34 @@
-# HoloPASWIN: In-Line Holographical Physics-Aware SWIN Transformer
+# HoloPASWIN v2
 
-A deep learning project for eliminating the **twin-image problem in in-line holography** using a **physics-aware Swin-UNet architecture** trained with synthetic holograms generated via the Angular Spectrum Method.
+Physics-Aware Swin Transformer for eliminating twin-image artifacts in in-line holography.
 
-## Development Setup
+## Installation
+
+This project uses [uv](https://github.com/astral-sh/uv) for dependency management.
+
+1.  **Install uv** (if not already installed):
+    ```bash
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    ```
+
+2.  **Sync Dependencies**:
+    Navigate to the `holopaswin` directory and run:
+    ```bash
+    uv sync
+    ```
+    This will create a virtual environment and install all locked dependencies from `uv.lock`.
+
+3.  **Training**:
+    To start training, run:
+    ```bash
+    uv run src/train.py
+    ```
+
+## Development
+
+-   **HOLO-PASWIN v2** builds upon Swin Transformer U-Net architecture.
+-   It accepts Hologram Intensity and outputs Complex Object (Phase & Amplitude).
+-   Dataset is loaded from efficient Parquet files.
 
 ### Installing Git Hooks
 

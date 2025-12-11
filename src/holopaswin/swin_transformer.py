@@ -1,7 +1,7 @@
 """Swin Transformer U-Net module for image refinement.
 
 This module provides a U-Net style architecture using Swin Transformer blocks
-as the encoder. It uses a pretrained Swin Transformer from timm as the encoder
+as the encoder. It uses a Swin Transformer from timm as the encoder
 and a simple convolutional decoder with skip connections for upsampling.
 """
 
@@ -13,7 +13,7 @@ from torch import nn
 class SwinTransformerSys(nn.Module):
     """A U-Net style architecture with Swin Transformer blocks.
 
-    This architecture uses a pretrained Swin Transformer from timm as the encoder
+    This architecture uses a Swin Transformer from timm as the encoder
     to extract multi-scale features, and a simple convolutional decoder with
     skip connections to upsample back to the original resolution.
 
@@ -22,24 +22,29 @@ class SwinTransformerSys(nn.Module):
     to preserve fine details.
     """
 
-    def __init__(self, img_size: int = 224, in_chans: int = 1, out_chans: int = 1) -> None:
+    def __init__(
+        self,
+        img_size: int = 224,
+        in_chans: int = 2,
+        out_chans: int = 2,
+        model_name: str = "swin_tiny_patch4_window7_224",
+    ) -> None:
         """Initialize the Swin Transformer U-Net.
 
         Args:
             img_size: Spatial size of input images (assumed square, e.g., 224).
                      Defaults to 224.
-            in_chans: Number of input channels. Defaults to 1.
-            out_chans: Number of output channels. Defaults to 1.
+            in_chans: Number of input channels. Defaults to 2 (Real/Imag).
+            out_chans: Number of output channels. Defaults to 2 (Real/Imag).
+            model_name: Name of the timm model to use. Defaults to "swin_tiny_patch4_window7_224".
         """
         super().__init__()
 
         # --- Encoder (Swin Transformer from timm) ---
         # We use swin_tiny_patch4_window7_224 as a lightweight base.
-        # We remove the head to get features.
-        # It could be better to use microsoft/swinv2-tiny-patch4-window16-256
-        # later on, it's not base on timm, so skipping for now.
+        # Pretrained = True (User Request).
         self.encoder = timm.create_model(
-            "swin_tiny_patch4_window7_224",
+            model_name,
             pretrained=True,
             features_only=True,
             img_size=img_size,
@@ -64,7 +69,7 @@ class SwinTransformerSys(nn.Module):
             nn.BatchNorm2d(encoder_channels[-4] // 2),
             nn.GELU(),
             nn.Conv2d(encoder_channels[-4] // 2, out_chans, kernel_size=3, padding=1),
-            nn.Sigmoid(),  # Assuming object is amplitude 0-1
+            # REMOVED Sigmoid: Real/Imag parts are not bounded [0,1].
         )
 
     def _up_block(self, in_c: int, out_c: int) -> nn.Sequential:
@@ -94,8 +99,7 @@ class SwinTransformerSys(nn.Module):
             x: Input tensor of shape (B, in_chans, H, W).
 
         Returns:
-            Output tensor of shape (B, out_chans, H, W) with values in [0, 1]
-            (due to final Sigmoid activation).
+            Output tensor of shape (B, out_chans, H, W).
         """
         # --- Encoder ---
         # timm features_only=True returns a list of features at different scales

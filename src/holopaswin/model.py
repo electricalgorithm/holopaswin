@@ -23,9 +23,9 @@ class HoloPASWIN(torch.nn.Module):
     clean the reconstruction and remove the twin image.
 
     Input: Hologram intensity (1 channel)
-    Internal: ASM Backprop -> Dirty Image (Twin included)
-    Refinement: SwinUNet cleans the dirty image
-    Output: Clean Object amplitude
+    Internal: ASM Backprop -> Dirty Image (Twin included, Complex)
+    Refinement: SwinUNet cleans the dirty image (Real/Imag -> Real/Imag)
+    Output: Clean Object Complex
     """
 
     def __init__(self, img_size: int, wavelength: float, pixel_size: float, z_dist: float) -> None:
@@ -40,11 +40,9 @@ class HoloPASWIN(torch.nn.Module):
         super().__init__()
         self.propagator = AngularSpectrumPropagator((img_size, img_size), wavelength, pixel_size, z_dist)
 
-        # Input to Swin is the Magnitude of the back-propagated field (1 channel)
-        # We could also feed Real+Imag (2 channels) if phase recovery is critical.
-        # Given the prompt implies removing twin image from visual reconstruction,
-        # starting with magnitude is a strong baseline.
-        self.swin_unet = SwinTransformerSys(img_size=img_size, in_chans=1, out_chans=1)
+        # Input to Swin is the Real and Imag parts of the back-propagated field (2 channels)
+        # Output is Clean Real and Imag parts (2 channels)
+        self.swin_unet = SwinTransformerSys(img_size=img_size, in_chans=2, out_chans=2)
 
     def forward(self, hologram: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Forward pass through the model.
@@ -54,13 +52,11 @@ class HoloPASWIN(torch.nn.Module):
 
         Returns:
             A tuple containing:
-                - clean_object: Cleaned object amplitude tensor of shape (B, 1, H, W).
-                - dirty_amp: Dirty reconstruction amplitude (before Swin refinement)
-                            of shape (B, 1, H, W).
+                - clean_object: Cleaned object Complex tensor of shape (B, 2, H, W).
+                - dirty_field: Dirty reconstruction Complex tensor of shape (B, 2, H, W).
         """
         # 1. Physics Step: Back-propagate Hologram to Object Plane
         # Input hologram is intensity (real). Treat as amplitude with flat phase 0.
-        # Or sqrt(hologram) if hologram is intensity.
         # Standard Digital Holography: Field = sqrt(Hologram)
         # 1e-8 is an epsilon value to handle hologram = 0 cases.
         complex_hologram = torch.complex(torch.sqrt(hologram + 1e-8), torch.zeros_like(hologram))
@@ -68,11 +64,14 @@ class HoloPASWIN(torch.nn.Module):
         # Propagate backwards (-z)
         reconstructed_field = self.propagator(complex_hologram, backward=True)
 
-        # Get "Dirty" Amplitude (contains Twin Image)
-        # This corresponds to the 'reconstruction' in your dataset
-        dirty_amp = torch.abs(reconstructed_field)
-
         # 2. Deep Learning Step: Remove Twin Image
-        clean_object = self.swin_unet(dirty_amp)
+        # Prepare input for Swin: Stack Real and Imag (B, 2, H, W)
+        dirty_real = reconstructed_field.real
+        dirty_imag = reconstructed_field.imag
+        dirty_input = torch.cat([dirty_real, dirty_imag], dim=1)  # (B, 2, H, W)
 
-        return clean_object, dirty_amp
+        # Swin UNet Refinement
+        clean_2ch = self.swin_unet(dirty_input)
+
+        # Return 2ch clean object (Real, Imag) and dirty input
+        return clean_2ch, dirty_input

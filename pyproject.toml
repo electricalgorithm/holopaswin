@@ -38,6 +38,8 @@ dependencies = [
     "scikit-image>=0.20.0",
     "matplotlib>=3.7.0",
     "tqdm>=4.65.0",
+    "pandas>=2.3.3",
+    "pyarrow>=22.0.0",
 ]
 
 [project.optional-dependencies]
@@ -109,4 +111,11 @@ module = [
     "torchvision.*",
 ]
 ignore_missing_imports = true
+
+[dependency-groups]
+dev = [
+    "mypy>=1.19.0",
+    "ruff>=0.14.9",
+    "types-tqdm>=4.67.0.20250809",
+]
 

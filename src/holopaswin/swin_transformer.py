@@ -128,4 +128,11 @@ class SwinTransformerSys(nn.Module):
 
         # Final restoration to 1/1 resolution
         out = self.final_up(d3)
+
+        # Residual Connection:
+        # The network learns the residual (correction) to apply to the dirty input.
+        # This preserves the strong object structure present in the dirty image
+        # while asking the network to subtract the twin image / noise.
+        out = out + x
+
         return out  # type: ignore[no-any-return]

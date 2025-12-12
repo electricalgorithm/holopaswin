@@ -107,69 +107,75 @@ def main() -> None:  # noqa: C901, PLR0915
     # --- Training Loop ---
     best_val_loss = float("inf")
 
-    for epoch in range(NUM_EPOCHS):
-        print(f"\nEpoch {epoch + 1}/{NUM_EPOCHS}")
+    try:
+        for epoch in range(NUM_EPOCHS):
+            print(f"\nEpoch {epoch + 1}/{NUM_EPOCHS}")
 
-        # 1. TRAINING PHASE
-        model.train()  # Set model to training mode (enables Dropout, BatchNorm updates)
-        train_loss = 0.0
-        progress_bar = tqdm.tqdm(train_loader, desc="Training", leave=False)
+            # 1. TRAINING PHASE
+            model.train()  # Set model to training mode (enables Dropout, BatchNorm updates)
+            train_loss = 0.0
+            progress_bar = tqdm.tqdm(train_loader, desc="Training", leave=False)
 
-        batch_count = 0
-        for holo, gt_obj in progress_bar:
-            holo_in = holo.to(device)
-            gt_obj_in = gt_obj.to(device)
-
-            optimizer.zero_grad()
-
-            # Forward pass returns (clean_complex, dirty_complex)
-            pred_clean, _ = model(holo_in)
-
-            # Loss expects (pred_2ch, target_2ch, input_1ch)
-            loss = criterion(pred_clean, gt_obj_in, holo_in)
-
-            loss.backward()
-            optimizer.step()
-
-            train_loss += loss.item()
-            progress_bar.set_postfix({"Batch Loss": f"{loss.item():.4f}"})
-
-            # For demo: limit to 20 batches to show it runs
-            batch_count += 1
-            if ENABLE_DEMO_MODE and batch_count >= DEMO_BATCH_LIMIT:
-                print(f" (Demo: Breaking early after {DEMO_BATCH_LIMIT} batches)")
-                break
-
-        avg_train_loss = train_loss / batch_count if batch_count > 0 else 0
-
-        # 2. VALIDATION PHASE
-        model.eval()  # Set model to evaluation mode (freezes BatchNorm stats, disables Dropout)
-        val_loss = 0.0
-
-        val_batch_count = 0
-        with torch.no_grad():  # Disable gradient calculation (saves huge memory/time)
-            for holo, gt_obj in tqdm.tqdm(val_loader, desc="Validating", leave=False):
+            batch_count = 0
+            for holo, gt_obj in progress_bar:
                 holo_in = holo.to(device)
                 gt_obj_in = gt_obj.to(device)
 
-                pred, _ = model(holo_in)
-                loss = criterion(pred, gt_obj_in, holo_in)
-                val_loss += loss.item()
+                optimizer.zero_grad()
 
-                val_batch_count += 1
-                if ENABLE_DEMO_MODE and val_batch_count >= DEMO_BATCH_LIMIT:  # Limit validation for demo too
+                # Forward pass returns (clean_complex, dirty_complex)
+                pred_clean, _ = model(holo_in)
+
+                # Loss expects (pred_2ch, target_2ch, input_1ch)
+                loss = criterion(pred_clean, gt_obj_in, holo_in)
+
+                loss.backward()
+                optimizer.step()
+
+                train_loss += loss.item()
+                progress_bar.set_postfix({"Batch Loss": f"{loss.item():.4f}"})
+
+                # For demo: limit to 20 batches to show it runs
+                batch_count += 1
+                if ENABLE_DEMO_MODE and batch_count >= DEMO_BATCH_LIMIT:
+                    print(f" (Demo: Breaking early after {DEMO_BATCH_LIMIT} batches)")
                     break
 
-        avg_val_loss = val_loss / val_batch_count if val_batch_count > 0 else 0
+            avg_train_loss = train_loss / batch_count if batch_count > 0 else 0
 
-        print(f"Done. Train Loss: {avg_train_loss:.4f} | Val Loss: {avg_val_loss:.4f}")
+            # 2. VALIDATION PHASE
+            model.eval()  # Set model to evaluation mode (freezes BatchNorm stats, disables Dropout)
+            val_loss = 0.0
 
-        # Simple Early Stopping / Checkpointing logic
-        # If this is the best model so far, save it.
-        if avg_val_loss <= best_val_loss:
-            best_val_loss = avg_val_loss
-            torch.save(model.state_dict(), "best_swin_holo.pth")
-            print("--> Best model saved!")
+            val_batch_count = 0
+            with torch.no_grad():  # Disable gradient calculation (saves huge memory/time)
+                for holo, gt_obj in tqdm.tqdm(val_loader, desc="Validating", leave=False):
+                    holo_in = holo.to(device)
+                    gt_obj_in = gt_obj.to(device)
+
+                    pred, _ = model(holo_in)
+                    loss = criterion(pred, gt_obj_in, holo_in)
+                    val_loss += loss.item()
+
+                    val_batch_count += 1
+                    if ENABLE_DEMO_MODE and val_batch_count >= DEMO_BATCH_LIMIT:  # Limit validation for demo too
+                        break
+
+            avg_val_loss = val_loss / val_batch_count if val_batch_count > 0 else 0
+
+            print(f"Done. Train Loss: {avg_train_loss:.4f} | Val Loss: {avg_val_loss:.4f}")
+
+            # Simple Early Stopping / Checkpointing logic
+            # If this is the best model so far, save it.
+            if avg_val_loss <= best_val_loss:
+                best_val_loss = avg_val_loss
+                torch.save(model.state_dict(), "best_swin_holo.pth")
+                print("--> Best model saved!")
+
+    except KeyboardInterrupt:
+        print("\nTraining interrupted by user. Saving current checkpoint...")
+        torch.save(model.state_dict(), "interrupted_swin_holo.pth")
+        print("--> Checkpoint saved to 'interrupted_swin_holo.pth'")
 
 
 if __name__ == "__main__":

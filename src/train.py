@@ -25,11 +25,13 @@ PIXEL_SIZE = 4.65e-6
 Z_DIST = 0.02
 
 # Training Configuration
-BATCH_SIZE = 6
+BATCH_SIZE = 32
 LR = 1e-4
-NUM_EPOCHS = 1  # Reduced for demo/validation purposes
-ENABLE_DEMO_MODE = True
+NUM_EPOCHS = 5  # Adjusted based on convergence speed
+ENABLE_DEMO_MODE = False
 DEMO_BATCH_LIMIT = 20
+EXP_DIR = "results/experiment6"
+MODEL_SAVE_PATH = f"{EXP_DIR}/holopaswin_exp6.pth"
 
 
 def main() -> None:  # noqa: C901, PLR0915
@@ -41,10 +43,12 @@ def main() -> None:  # noqa: C901, PLR0915
     3. Runs training and validation loops for the specified number of epochs
     4. Saves the best model checkpoint based on validation loss
 
-    The training uses physics-constrained loss combining structural L1 loss
-    with physics consistency loss. The best model (lowest validation loss)
-    is saved as 'best_swin_holo.pth' in the current directory.
+    The training uses physics-constrained loss combining structural L1,
+    Phase, Amplitude, and Frequency loss. The best model (lowest validation loss)
+    is saved in 'results/experiment6/holopaswin_exp6.pth'.
     """
+    # Create experiment directory
+    Path(EXP_DIR).mkdir(parents=True, exist_ok=True)
     # Setup Device (MPS for Mac, CUDA for Colab, else CPU)
     if torch.cuda.is_available():
         device = torch.device("cuda")
@@ -169,8 +173,8 @@ def main() -> None:  # noqa: C901, PLR0915
             # If this is the best model so far, save it.
             if avg_val_loss <= best_val_loss:
                 best_val_loss = avg_val_loss
-                torch.save(model.state_dict(), "best_swin_holo.pth")
-                print("--> Best model saved!")
+                torch.save(model.state_dict(), MODEL_SAVE_PATH)
+                print(f"--> Best model saved to {MODEL_SAVE_PATH}!")
 
     except KeyboardInterrupt:
         print("\nTraining interrupted by user. Saving current checkpoint...")

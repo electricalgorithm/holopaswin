@@ -23,8 +23,8 @@ PIXEL_SIZE = 4.65e-6
 Z_DIST = 0.02
 
 # Define paths
-MODEL_PATH = "results/experiment3/holopaswin_exp3.pth"
-TEST_DATA_DIR = "../hologen/inline-digital-holography-v2"
+MODEL_PATH = "results/experiment5/holopaswin_exp5.pth"
+TEST_DATA_DIR = "results/experiment5/test-dataset"
 
 # Number of samples to test
 SAMPLES_TO_TEST = 500
@@ -78,10 +78,17 @@ def calculate_metrics_on_dataset(model_path: str, data_dir: str, num_samples: in
 
     print(f"Evaluating on {num_samples} random samples...")
 
-    # Storage for metrics (Amplitude based)
-    mse_scores = []
-    ssim_scores = []
-    psnr_scores = []
+    # Storage for metrics
+    amp_mse_list = []
+    amp_ssim_list = []
+    amp_psnr_list = []
+
+    phase_mse_list = []
+    phase_ssim_list = []
+    phase_psnr_list = []
+
+    # Complex MSE as a single scalar: mean(|pred - gt|^2)
+    complex_mse_list = []
 
     # 3. Evaluation Loop
     with torch.no_grad():
@@ -89,77 +96,95 @@ def calculate_metrics_on_dataset(model_path: str, data_dir: str, num_samples: in
             # Load Data
             holo_t, gt_obj_t = dataset[idx]  # holo: (1,H,W), gt: (2,H,W) [real, imag]
 
-            # Prepare Batch (Normalize / 1000.0 if not done by dataset)
-            # Dataset DOES normalize by 1000.0, so we just unsqueeze
-            # The previous inference script had a bug where it normalized twice or once depending on context.
-            # The dataset definition sets holo = h_np / 1000.0.
+            # Prepare Batch
             holo_in = holo_t.unsqueeze(0).to(device)
 
             # Run Inference
             clean_pred, _ = model(holo_in)
 
-            # --- Convert to Numpy for Metrics ---
-            # We calculate metrics on AMPLITUDE for standard comparisons
-
-            # Predict Amplitude
+            # --- PREPARE DATA ---
+            # Prediction
             pred_c = torch.complex(clean_pred[:, 0, :, :], clean_pred[:, 1, :, :])
             pred_amp = torch.abs(pred_c).squeeze().cpu().numpy()
-
-            # GT Amplitude
+            pred_phase = torch.angle(pred_c).squeeze().cpu().numpy()
+            
+            # Ground Truth
             gt_c = torch.complex(gt_obj_t[0], gt_obj_t[1])
             gt_amp = torch.abs(gt_c).numpy()
+            gt_phase = torch.angle(gt_c).numpy()
+            
+            # --- 1. AMPLITUDE METRICS ---
+            # Clip for stability
+            pred_amp_c = np.clip(pred_amp, 0, 1.2)
+            gt_amp_c = np.clip(gt_amp, 0, 1.2)
+            
+            val_amp_mse = mse(gt_amp_c, pred_amp_c)  # type: ignore[no-untyped-call]
+            val_amp_ssim = ssim(gt_amp_c, pred_amp_c, data_range=1.2)  # type: ignore[no-untyped-call]
+            val_amp_psnr = psnr(gt_amp_c, pred_amp_c, data_range=1.2)  # type: ignore[no-untyped-call]
+            
+            amp_mse_list.append(val_amp_mse)
+            amp_ssim_list.append(val_amp_ssim)
+            amp_psnr_list.append(val_amp_psnr)
 
-            # Ensure range / Clipping for stability
-            # GT is typically [0, 1] for amplitude
-            # Pred might overshoot
-            pred_np = np.clip(pred_amp, 0, 1.2)  # Clip slightly above 1
-            gt_np = np.clip(gt_amp, 0, 1.2)  # Clip slightly above 1
+            # --- 2. PHASE METRICS ---
+            # Phase is naturally [-pi, pi].
+            # Direct comparison is tricky due to wrapping, but standard metrics assume linear scale.
+            # We use data_range = 2 * pi.
+            data_range_phase = 2 * np.pi
+            
+            val_phase_mse = mse(gt_phase, pred_phase)  # type: ignore[no-untyped-call]
+            val_phase_ssim = ssim(gt_phase, pred_phase, data_range=data_range_phase)  # type: ignore[no-untyped-call]
+            val_phase_psnr = psnr(gt_phase, pred_phase, data_range=data_range_phase)  # type: ignore[no-untyped-call]
+            
+            phase_mse_list.append(val_phase_mse)
+            phase_ssim_list.append(val_phase_ssim)
+            phase_psnr_list.append(val_phase_psnr)
 
-            # Normalize to 0-1 for SSIM/PSNR standard calculation if max > 1
-            # But here we treat values as absolute physics quantities.
-            # SSIM data_range needs to be specified.
-
-            # --- Calculate Metrics ---
-            # 1. MSE: Lower is better. (0 = perfect match)
-            val_mse = mse(gt_np, pred_np)  # type: ignore[no-untyped-call]
-
-            # 2. SSIM: Higher is better. (1.0 = perfect match)
-            val_ssim = ssim(gt_np, pred_np, data_range=1.2)  # type: ignore[no-untyped-call]
-
-            # 3. PSNR: Higher is better.
-            val_psnr = psnr(gt_np, pred_np, data_range=1.2)  # type: ignore[no-untyped-call]
-
-            mse_scores.append(val_mse)
-            ssim_scores.append(val_ssim)
-            psnr_scores.append(val_psnr)
+            # --- 3. COMPLEX METRICS ---
+            # Complex MSE: mean(|z_pred - z_gt|^2)
+            diff = pred_c.cpu().numpy().squeeze() - gt_c.numpy()
+            val_complex_mse = np.mean(np.abs(diff) ** 2)
+            complex_mse_list.append(val_complex_mse)
 
             if (i + 1) % 50 == 0:
-                print(f"Sample {i + 1}/{num_samples} -> SSIM: {val_ssim:.4f} | PSNR: {val_psnr:.2f}dB")
+                print(f"Sample {i + 1}/{num_samples} -> Amp SSIM: {val_amp_ssim:.4f} | Phase SSIM: {val_phase_ssim:.4f}")
 
     # 4. Aggregation
     results = {
         "count": num_samples,
-        "mse_mean": np.mean(mse_scores),
-        "mse_std": np.std(mse_scores),
-        "ssim_mean": np.mean(ssim_scores),
-        "ssim_std": np.std(ssim_scores),
-        "psnr_mean": np.mean(psnr_scores),
-        "psnr_std": np.std(psnr_scores),
+        "amp": {
+            "mse": (np.mean(amp_mse_list), np.std(amp_mse_list)),
+            "ssim": (np.mean(amp_ssim_list), np.std(amp_ssim_list)),
+            "psnr": (np.mean(amp_psnr_list), np.std(amp_psnr_list)),
+        },
+        "phase": {
+            "mse": (np.mean(phase_mse_list), np.std(phase_mse_list)),
+            "ssim": (np.mean(phase_ssim_list), np.std(phase_ssim_list)),
+            "psnr": (np.mean(phase_psnr_list), np.std(phase_psnr_list)),
+        },
+        "complex": {
+            "mse": (np.mean(complex_mse_list), np.std(complex_mse_list)),
+        }
     }
 
-    print("\n" + "=" * 40)
-    print("   FINAL MODEL ACCURACY REPORT (Exp 3)   ")
-    print("=" * 40)
+    print("\n" + "=" * 60)
+    print("   FINAL MODEL ACCURACY REPORT   ")
+    print("=" * 60)
     print(f"Evaluated on: {results['count']} samples")
-    print("-" * 40)
-    print(f"MSE (Mean Squared Error):     {results['mse_mean']:.6f} (±{results['mse_std']:.6f})")
-    print(f"SSIM (Structural Similarity): {results['ssim_mean']:.4f}   (±{results['ssim_std']:.4f})")
-    print(f"PSNR (Peak Signal-Noise):     {results['psnr_mean']:.2f} dB  (±{results['psnr_std']:.2f})")
-    print("-" * 40)
-    print("Interpretation:")
-    print(" - SSIM > 0.9 is considered excellent.")
-    print(" - PSNR > 30 dB is considered excellent.")
-    print("=" * 40)
+    print("-" * 60)
+    print("AMPLITUDE DOMAIN (Absorption/Objects)")
+    print(f"  MSE:  {results['amp']['mse'][0]:.6f} (±{results['amp']['mse'][1]:.6f})")
+    print(f"  SSIM: {results['amp']['ssim'][0]:.4f}   (±{results['amp']['ssim'][1]:.4f})")
+    print(f"  PSNR: {results['amp']['psnr'][0]:.2f} dB  (±{results['amp']['psnr'][1]:.2f})")
+    print("-" * 60)
+    print("PHASE DOMAIN (Thickness/Refractive Index)")
+    print(f"  MSE:  {results['phase']['mse'][0]:.6f} (±{results['phase']['mse'][1]:.6f})")
+    print(f"  SSIM: {results['phase']['ssim'][0]:.4f}   (±{results['phase']['ssim'][1]:.4f})")
+    print(f"  PSNR: {results['phase']['psnr'][0]:.2f} dB  (±{results['phase']['psnr'][1]:.2f})")
+    print("-" * 60)
+    print("COMPLEX DOMAIN (Overall Fidelity)")
+    print(f"  MSE:  {results['complex']['mse'][0]:.6f} (±{results['complex']['mse'][1]:.6f})")
+    print("=" * 60)
 
     return results
 

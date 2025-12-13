@@ -18,7 +18,9 @@ from holopaswin.model import HoloPASWIN
 
 # Dataset/Model Configuration
 # Should point to the dataset directory relative to where script is run
-DATA_DIR = "../hologen/inline-digital-holography-v2"
+# Dataset/Model Configuration
+# Should point to the dataset directory relative to where script is run
+DATA_DIR = "../hologen/dataset-224"
 IMG_SIZE = 224
 WAVELENGTH = 532e-9
 PIXEL_SIZE = 4.65e-6
@@ -30,8 +32,8 @@ LR = 1e-4
 NUM_EPOCHS = 5  # Adjusted based on convergence speed
 ENABLE_DEMO_MODE = False
 DEMO_BATCH_LIMIT = 20
-EXP_DIR = "results/experiment6"
-MODEL_SAVE_PATH = f"{EXP_DIR}/holopaswin_exp6.pth"
+EXP_DIR = "results/experiment8"
+MODEL_SAVE_PATH = f"{EXP_DIR}/holopaswin_exp8.pth"
 
 
 def main() -> None:  # noqa: C901, PLR0915
@@ -45,7 +47,7 @@ def main() -> None:  # noqa: C901, PLR0915
 
     The training uses physics-constrained loss combining structural L1,
     Phase, Amplitude, and Frequency loss. The best model (lowest validation loss)
-    is saved in 'results/experiment6/holopaswin_exp6.pth'.
+    is saved in 'results/experiment8/holopaswin_exp8.pth'.
     """
     # Create experiment directory
     Path(EXP_DIR).mkdir(parents=True, exist_ok=True)
@@ -69,7 +71,7 @@ def main() -> None:  # noqa: C901, PLR0915
     # --- Data Loading & Splitting ---
     print(f"Loading dataset from: {DATA_DIR}")
     try:
-        full_dataset = HoloDataset(data_dir=DATA_DIR, target_size=IMG_SIZE)
+        full_dataset = HoloDataset(data_dir=DATA_DIR, target_size=IMG_SIZE, img_dim=IMG_SIZE)
     except Exception as e:  # noqa: BLE001
         print(f"Error loading dataset: {e}")
         # Identify if path issue
@@ -82,31 +84,31 @@ def main() -> None:  # noqa: C901, PLR0915
         print("Dataset is empty. Exiting.")
         return
 
-    # Split: 80% Train, 10% Validation, 10% Test
-    test_size = int(0.1 * total_size)
-    val_size = int(0.1 * total_size)
-    train_size = total_size - val_size - test_size
+    # Calculate split sizes
+    total_size = len(full_dataset)
+    if total_size == 0:
+        print("Dataset is empty. Exiting.")
+        return
+
+    # Split: 80% Train, 20% Validation (No test set, as external test set exists)
+    val_size = int(0.2 * total_size)
+    train_size = total_size - val_size
 
     # Perform the split
-    train_dataset, val_dataset, test_dataset = torch.utils.data.random_split(
+    train_dataset, val_dataset = torch.utils.data.random_split(
         full_dataset,
-        [train_size, val_size, test_size],
+        [train_size, val_size],
         generator=torch.Generator().manual_seed(42),  # Fixed seed for reproducibility
     )
 
     print(f"Total Images: {total_size}")
     print(f"Training Set: {len(train_dataset)} images")
     print(f"Validation Set: {len(val_dataset)} images")
-    print(f"Test Set: {len(test_dataset)} images")
 
     # Create Loaders
     num_workers = 0  # safe default for simple script
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=num_workers)
     val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE * 2, shuffle=False, num_workers=num_workers)
-    # Use test_loader to silence unused variable warning, or comment out.
-    # For now, we just create it. To silence F841 we can print something about it.
-    test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE * 2, shuffle=False, num_workers=num_workers)
-    print(f"Test batch count: {len(test_loader)}")
 
     # --- Training Loop ---
     best_val_loss = float("inf")

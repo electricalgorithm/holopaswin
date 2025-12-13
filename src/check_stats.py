@@ -6,10 +6,10 @@ import matplotlib.pyplot as plt
 from holopaswin.dataset import HoloDataset
 from holopaswin.model import HoloPASWIN
 
-DATA_DIR = "./results/experiment5/test-dataset"
+DATA_DIR = "../hologen/test-dataset-224"
 IMG_SIZE = 224
 
-MODEL_PATH = "results/experiment6/holopaswin_exp6.pth"
+MODEL_PATH = "results/experiment8/holopaswin_exp8.pth"
 # Model Config
 WAVELENGTH = 532e-9
 PIXEL_SIZE = 4.65e-6
@@ -21,9 +21,9 @@ def check_gt_stats():
         device = torch.device("mps")
         
     print(f"Loading dataset from {DATA_DIR}...")
-    dataset = HoloDataset(DATA_DIR, target_size=IMG_SIZE)
-    
-    print(f"Loading model from {MODEL_PATH}...")
+    # NOTE: img_dim matches target size (224) for the new dataset
+    dataset = HoloDataset(DATA_DIR, target_size=IMG_SIZE, img_dim=IMG_SIZE)
+    print(f"Found {len(dataset.holo_files)} hologram parquet files.")
     model = HoloPASWIN(IMG_SIZE, WAVELENGTH, PIXEL_SIZE, Z_DIST).to(device)
     try:
         model.load_state_dict(torch.load(MODEL_PATH, map_location=device))
@@ -35,10 +35,10 @@ def check_gt_stats():
     # Pick random samples
     indices = np.random.choice(len(dataset), 50, replace=False)
     
-    print("\nChecking GT vs PRED Amplitude & Phase stats for 50 random samples:")
-    print("-" * 130)
-    print(f"{'Sample':<6} | {'GT Amp (Min/Max)':<20} | {'Pred Amp (Min/Max)':<20} | {'GT Pha (Min/Max)':<20} | {'Pred Pha (Min/Max)':<20}")
-    print("-" * 130)
+    print("\nChecking GT vs PRED Amplitude & Phase stats (plus DIRTY Input) for 50 random samples:")
+    print("-" * 155)
+    print(f"{'Sample':<6} | {'GT Amp (Min/Max)':<18} | {'Pred Amp (Min/Max)':<18} | {'GT Pha (Min/Max)':<18} | {'Pred Pha (Min/Max)':<18} | {'Dirty Amp Max':<12}")
+    print("-" * 155)
     
     global_gt_amp_max = -float('inf')
     global_pred_amp_max = -float('inf')
@@ -59,7 +59,14 @@ def check_gt_stats():
             
             # --- Prediction Stats ---
             holo_in = holo_t.unsqueeze(0).to(device)
-            clean_pred, _ = model(holo_in)
+            clean_pred, dirty_input = model(holo_in)
+            
+            # Analyze Dirty Input
+            dirty_real = dirty_input[:, 0, :, :]
+            dirty_imag = dirty_input[:, 1, :, :]
+            dirty_c = torch.complex(dirty_real, dirty_imag)
+            dirty_amp = torch.abs(dirty_c).squeeze().detach().cpu().numpy()
+            dirty_max_val = dirty_amp.max()
             
             pred_c = torch.complex(clean_pred[:, 0, :, :], clean_pred[:, 1, :, :])
             pred_amp = torch.abs(pred_c).squeeze().cpu().numpy()
@@ -75,9 +82,9 @@ def check_gt_stats():
             global_pred_phase_max = max(global_pred_phase_max, pred_phase.max())
             
             if i < 15: # Print first 15
-                print(f"{idx:<6} | {gt_amp.min():.4f} / {gt_amp.max():.4f}    | {pred_amp.min():.4f} / {pred_amp.max():.4f}      | {gt_phase.min():.4f} / {gt_phase.max():.4f}    | {pred_phase.min():.4f} / {pred_phase.max():.4f}")
+                print(f"{idx:<6} | {gt_amp.min():.4f}/{gt_amp.max():.4f}   | {pred_amp.min():.4f}/{pred_amp.max():.4f}   | {gt_phase.min():.4f}/{gt_phase.max():.4f}   | {pred_phase.min():.4f}/{pred_phase.max():.4f}   | {dirty_max_val:.4f}")
             
-    print("-" * 130)
+    print("-" * 155)
     print(f"Global GT   Amp Max: {global_gt_amp_max:.4f}")
     print(f"Global Pred Amp Max: {global_pred_amp_max:.4f}")
     print(f"Global GT   Phase Range: [{global_gt_phase_min:.4f}, {global_gt_phase_max:.4f}]")

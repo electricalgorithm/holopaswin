@@ -23,8 +23,10 @@ PIXEL_SIZE = 4.65e-6
 Z_DIST = 0.02
 
 # Define paths
-MODEL_PATH = "results/experiment5/holopaswin_exp5.pth"
-TEST_DATA_DIR = "results/experiment5/test-dataset"
+# Should point to the dataset directory relative to where script is run
+# EXP 8
+MODEL_PATH = "results/experiment8/holopaswin_exp8.pth"
+TEST_DATA_DIR = "../hologen/test-dataset-224"
 
 # Number of samples to test
 SAMPLES_TO_TEST = 500
@@ -60,9 +62,10 @@ def calculate_metrics_on_dataset(model_path: str, data_dir: str, num_samples: in
     model.eval()
 
     # 2. Load Dataset
-    print(f"Loading dataset from {data_dir}...")
+    print(f"Loading dataset from: {TEST_DATA_DIR}")
     try:
-        dataset = HoloDataset(data_dir, target_size=IMG_SIZE)
+        # EXP 8 uses 224x224 native dataset
+        dataset = HoloDataset(data_dir=TEST_DATA_DIR, target_size=IMG_SIZE, img_dim=IMG_SIZE)
     except Exception as e:  # noqa: BLE001
         print(f"Error loading dataset: {e}")
         return None

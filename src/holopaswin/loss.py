@@ -25,13 +25,7 @@ class PhysicsLoss(torch.nn.Module):
     """
 
     def __init__(self, propagator: "AngularSpectrumPropagator", lambda_physics: float = 0.1) -> None:
-        """Initialize the physics loss function.
-
-        Args:
-            propagator: AngularSpectrumPropagator instance for forward propagation.
-            lambda_physics: Weight for the physics consistency loss term.
-                          Defaults to 0.1.
-        """
+        """Initialize the physics loss function."""
         super().__init__()
         self.propagator = propagator
         self.l1 = torch.nn.L1Loss()
@@ -55,22 +49,38 @@ class PhysicsLoss(torch.nn.Module):
         Returns:
             Total loss value as a scalar tensor.
         """
-        # 1. Structural Loss (Supervised)
-        # Compare cleaned output with ground truth object directly in 2-channel representation
-        # This penalizes Real and Imag errors equally.
-        loss_img = self.l1(pred_obj_2ch, target_obj_2ch)
-
-        # 2. Physics Consistency Loss (Unsupervised/Constraint)
-        # Construct complex tensor for propagation
         pred_complex = torch.complex(pred_obj_2ch[:, 0:1, ...], pred_obj_2ch[:, 1:2, ...])
+        target_complex = torch.complex(target_obj_2ch[:, 0:1, ...], target_obj_2ch[:, 1:2, ...])
 
+        # 1. Complex Structural Loss (Supervised)
+        # L1 on Real/Imag parts separately
+        loss_complex = self.l1(pred_obj_2ch, target_obj_2ch)
+
+        # 2. Amplitude Loss (Supervised)
+        # Explicitly penalize errors in magnitude to prevent "empty" predictions
+        pred_amp = torch.abs(pred_complex)
+        target_amp = torch.abs(target_complex)
+        loss_amp = self.l1(pred_amp, target_amp)
+
+        # 3. Phase Loss (Supervised)
+        # Explicitly penalize errors in phase.
+        # around the core object, direct L1 on angle is a strong starting point.
+        pred_phase = torch.angle(pred_complex)
+        target_phase = torch.angle(target_complex)
+        loss_phase = self.l1(pred_phase, target_phase)
+
+        # 4. Physics Consistency Loss (Unsupervised constraint)
         # Propagate +z (Forward to Hologram Plane)
         pred_field_holo = self.propagator(pred_complex, backward=False)
-
-        # Calculate Intensity (Hologram)
         pred_hologram = torch.abs(pred_field_holo) ** 2
-
-        # Compare predicted hologram with real input hologram
         loss_phy = self.l1(pred_hologram, input_hologram)
 
-        return loss_img + (self.lambda_p * loss_phy)  # type: ignore[no-any-return]
+        # Total Loss Combination
+        # Normalized Weights (Sum of supervised terms = 1.0):
+        # - Amplitude (0.5): Highest priority to force particle detection (fix "empty" output).
+        # - Complex (0.25): Baseline numerical stability constraint.
+        # - Phase (0.25): Refinement for internal structure/thickness.
+        # - Physics (lambda): Independent consistency constraint.
+        loss_supervised = (0.25 * loss_complex) + (0.5 * loss_amp) + (0.25 * loss_phase)
+
+        return loss_supervised + (self.lambda_p * loss_phy)  # type: ignore[no-any-return]

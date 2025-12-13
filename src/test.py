@@ -4,17 +4,16 @@ This module provides functionality to evaluate a trained model on a test dataset
 computing standard image quality metrics including SSIM, MSE, and PSNR.
 """
 
-import glob
 import os
-import random
 
 import numpy as np
 import torch
+import torch.utils.data
 from skimage.metrics import mean_squared_error as mse
 from skimage.metrics import peak_signal_noise_ratio as psnr
 from skimage.metrics import structural_similarity as ssim
-from torchvision import transforms
 
+from holopaswin.dataset import HoloDataset
 from holopaswin.model import HoloPASWIN
 
 # Model/Dataset Configuration
@@ -24,65 +23,62 @@ PIXEL_SIZE = 4.65e-6
 Z_DIST = 0.02
 
 # Define paths
-MODEL_PATH = "best_swin_holo.pth"
-TEST_DATA_DIR = "./data_test"
+MODEL_PATH = "results/experiment3/holopaswin_exp3.pth"
+TEST_DATA_DIR = "../hologen/inline-digital-holography-v2"
 
 # Number of samples to test
-SAMPLES_TO_TEST = 2000
+SAMPLES_TO_TEST = 500
 
 
 def calculate_metrics_on_dataset(model_path: str, data_dir: str, num_samples: int = 100) -> dict[str, float] | None:  # noqa: PLR0915
     """Evaluate a trained model on a test dataset and compute image quality metrics.
 
-    Loads the model, randomly selects samples from the test directory,
-    computes SSIM, MSE, and PSNR for each sample, and returns aggregated
-    statistics (mean and standard deviation).
-
     Args:
         model_path: Path to the saved model checkpoint (.pth file).
-        data_dir: Directory containing .npz test files.
+        data_dir: Directory containing parquet files.
         num_samples: Number of random samples to evaluate. Defaults to 100.
 
     Returns:
-        A dictionary containing:
-            - count: Number of samples evaluated
-            - mse_mean: Mean MSE across all samples
-            - mse_std: Standard deviation of MSE
-            - ssim_mean: Mean SSIM across all samples
-            - ssim_std: Standard deviation of SSIM
-            - psnr_mean: Mean PSNR across all samples (in dB)
-            - psnr_std: Standard deviation of PSNR
-        Returns None if no files are found in the data directory.
-
-    Raises:
-        FileNotFoundError: If the model file does not exist.
+        A dictionary containing aggregated metrics.
     """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if torch.backends.mps.is_available():
+        device = torch.device("mps")
     print(f"--- Starting Evaluation on {device} ---")
 
     # 1. Load Model
     if not os.path.exists(model_path):
-        raise FileNotFoundError(f"Model not found at {model_path}")
-
-    model = HoloPASWIN(IMG_SIZE, WAVELENGTH, PIXEL_SIZE, Z_DIST).to(device)
-    model.load_state_dict(torch.load(model_path, map_location=device))
-    model.eval()
-
-    # 2. Load Data List
-    files = glob.glob(os.path.join(data_dir, "*.npz"))
-    if len(files) == 0:
-        print(f"Error: No .npz files found in {data_dir}")
+        print(f"Model not found at {model_path}")
         return None
 
-    # Select samples
-    num_samples = min(num_samples, len(files))
-    selected_indices = random.sample(range(len(files)), num_samples)
+    model = HoloPASWIN(IMG_SIZE, WAVELENGTH, PIXEL_SIZE, Z_DIST).to(device)
+    try:
+        model.load_state_dict(torch.load(model_path, map_location=device))
+    except Exception as e:  # noqa: BLE001
+        print(f"Error loading model weights: {e}")
+        return None
+    model.eval()
+
+    # 2. Load Dataset
+    print(f"Loading dataset from {data_dir}...")
+    try:
+        dataset = HoloDataset(data_dir, target_size=IMG_SIZE)
+    except Exception as e:  # noqa: BLE001
+        print(f"Error loading dataset: {e}")
+        return None
+
+    if len(dataset) == 0:
+        print("Dataset is empty!")
+        return None
+
+    # Select random samples
+    total_samples = len(dataset)
+    num_samples = min(num_samples, total_samples)
+    selected_indices = np.random.choice(total_samples, num_samples, replace=False)
+
     print(f"Evaluating on {num_samples} random samples...")
 
-    # Resizing transform (Must match training!)
-    resizer = transforms.Resize((IMG_SIZE, IMG_SIZE), interpolation=transforms.InterpolationMode.BILINEAR)
-
-    # Storage for metrics
+    # Storage for metrics (Amplitude based)
     mse_scores = []
     ssim_scores = []
     psnr_scores = []
@@ -91,47 +87,54 @@ def calculate_metrics_on_dataset(model_path: str, data_dir: str, num_samples: in
     with torch.no_grad():
         for i, idx in enumerate(selected_indices):
             # Load Data
-            data = np.load(files[idx])
+            holo_t, gt_obj_t = dataset[idx]  # holo: (1,H,W), gt: (2,H,W) [real, imag]
 
-            # Prepare Ground Truth (Object)
-            obj_raw = data["object"].astype(np.float32)
-            obj_tensor = torch.from_numpy(obj_raw).unsqueeze(0).unsqueeze(0)  # (1,1,H,W)
-            obj_tensor = resizer(obj_tensor).to(device)
-
-            # Prepare Input (Hologram)
-            holo_raw = data["hologram"].astype(np.float32)
-            holo_tensor = torch.from_numpy(holo_raw).unsqueeze(0).unsqueeze(0)
-            holo_tensor = resizer(holo_tensor).to(device)
+            # Prepare Batch (Normalize / 1000.0 if not done by dataset)
+            # Dataset DOES normalize by 1000.0, so we just unsqueeze
+            # The previous inference script had a bug where it normalized twice or once depending on context.
+            # The dataset definition sets holo = h_np / 1000.0.
+            holo_in = holo_t.unsqueeze(0).to(device)
 
             # Run Inference
-            clean_pred, _ = model(holo_tensor)
+            clean_pred, _ = model(holo_in)
 
             # --- Convert to Numpy for Metrics ---
-            # We squeeze to (H, W) because sk-image metrics expect 2D arrays for grayscale
-            pred_np = clean_pred.squeeze().cpu().numpy()
-            gt_np = obj_tensor.squeeze().cpu().numpy()
+            # We calculate metrics on AMPLITUDE for standard comparisons
 
-            # Ensure range is [0, 1] for SSIM stability
-            pred_np = np.clip(pred_np, 0, 1)
-            gt_np = np.clip(gt_np, 0, 1)
+            # Predict Amplitude
+            pred_c = torch.complex(clean_pred[:, 0, :, :], clean_pred[:, 1, :, :])
+            pred_amp = torch.abs(pred_c).squeeze().cpu().numpy()
+
+            # GT Amplitude
+            gt_c = torch.complex(gt_obj_t[0], gt_obj_t[1])
+            gt_amp = torch.abs(gt_c).numpy()
+
+            # Ensure range / Clipping for stability
+            # GT is typically [0, 1] for amplitude
+            # Pred might overshoot
+            pred_np = np.clip(pred_amp, 0, 1.2)  # Clip slightly above 1
+            gt_np = np.clip(gt_amp, 0, 1.2)  # Clip slightly above 1
+
+            # Normalize to 0-1 for SSIM/PSNR standard calculation if max > 1
+            # But here we treat values as absolute physics quantities.
+            # SSIM data_range needs to be specified.
 
             # --- Calculate Metrics ---
             # 1. MSE: Lower is better. (0 = perfect match)
             val_mse = mse(gt_np, pred_np)  # type: ignore[no-untyped-call]
 
             # 2. SSIM: Higher is better. (1.0 = perfect match)
-            # data_range=1.0 is crucial because our images are float 0-1
-            val_ssim = ssim(gt_np, pred_np, data_range=1.0)  # type: ignore[no-untyped-call]
+            val_ssim = ssim(gt_np, pred_np, data_range=1.2)  # type: ignore[no-untyped-call]
 
-            # 3. PSNR: Higher is better. (Infinity = perfect match, >30 is usually excellent)
-            val_psnr = psnr(gt_np, pred_np, data_range=1.0)  # type: ignore[no-untyped-call]
+            # 3. PSNR: Higher is better.
+            val_psnr = psnr(gt_np, pred_np, data_range=1.2)  # type: ignore[no-untyped-call]
 
             mse_scores.append(val_mse)
             ssim_scores.append(val_ssim)
             psnr_scores.append(val_psnr)
 
-            if i % 10 == 0:
-                print(f"Sample {i}/{num_samples} -> SSIM: {val_ssim:.4f} | PSNR: {val_psnr:.2f}dB")
+            if (i + 1) % 50 == 0:
+                print(f"Sample {i + 1}/{num_samples} -> SSIM: {val_ssim:.4f} | PSNR: {val_psnr:.2f}dB")
 
     # 4. Aggregation
     results = {
@@ -145,7 +148,7 @@ def calculate_metrics_on_dataset(model_path: str, data_dir: str, num_samples: in
     }
 
     print("\n" + "=" * 40)
-    print("   FINAL MODEL ACCURACY REPORT   ")
+    print("   FINAL MODEL ACCURACY REPORT (Exp 3)   ")
     print("=" * 40)
     print(f"Evaluated on: {results['count']} samples")
     print("-" * 40)
@@ -154,16 +157,12 @@ def calculate_metrics_on_dataset(model_path: str, data_dir: str, num_samples: in
     print(f"PSNR (Peak Signal-Noise):     {results['psnr_mean']:.2f} dB  (±{results['psnr_std']:.2f})")
     print("-" * 40)
     print("Interpretation:")
-    print(" - SSIM > 0.9 is considered excellent structural fidelity.")
-    print(" - PSNR > 30 dB typically indicates high quality reconstruction.")
+    print(" - SSIM > 0.9 is considered excellent.")
+    print(" - PSNR > 30 dB is considered excellent.")
     print("=" * 40)
 
     return results
 
 
 if __name__ == "__main__":
-    try:
-        metrics = calculate_metrics_on_dataset(MODEL_PATH, TEST_DATA_DIR, SAMPLES_TO_TEST)
-    except FileNotFoundError as e:
-        print(f"\nValidation Failed: {e}")
-        print("Ensure you have downloaded data into ./data_test folder.")
+    calculate_metrics_on_dataset(MODEL_PATH, TEST_DATA_DIR, SAMPLES_TO_TEST)

@@ -77,11 +77,7 @@ class HoloDataset(Dataset[tuple[torch.Tensor, torch.Tensor]]):
         # Define resizing transform
         # We use CenterCrop instead of Resize to preserve pixel pitch (physics).
         # Resizing would change the effective pixel size and break propagation.
-        self.resize = transforms.Compose(
-            [
-                transforms.CenterCrop(target_size)
-            ]
-        )
+        self.resize = transforms.Compose([transforms.CenterCrop(target_size)])
 
     def __len__(self) -> int:
         """Return the number of samples in the dataset."""

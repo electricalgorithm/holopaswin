@@ -36,7 +36,7 @@ EXP_DIR = "results/experiment8"
 MODEL_SAVE_PATH = f"{EXP_DIR}/holopaswin_exp8.pth"
 
 
-def main() -> None:  # noqa: C901, PLR0915
+def main() -> None:  # noqa: C901, PLR0915, PLR0912
     """Train the HoloPASWIN model.
 
     This function orchestrates the complete training pipeline:

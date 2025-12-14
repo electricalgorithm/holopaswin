@@ -5,6 +5,7 @@ computing standard image quality metrics including SSIM, MSE, and PSNR.
 """
 
 import os
+from typing import Any
 
 import numpy as np
 import torch
@@ -32,7 +33,9 @@ TEST_DATA_DIR = "../hologen/test-dataset-224"
 SAMPLES_TO_TEST = 500
 
 
-def calculate_metrics_on_dataset(model_path: str, data_dir: str, num_samples: int = 100) -> dict[str, float] | None:  # noqa: PLR0915
+def calculate_metrics_on_dataset(  # noqa: PLR0915
+    model_path: str, data_dir: str, num_samples: int = 100
+) -> dict[str, Any] | None:
     """Evaluate a trained model on a test dataset and compute image quality metrics.
 
     Args:
@@ -65,7 +68,7 @@ def calculate_metrics_on_dataset(model_path: str, data_dir: str, num_samples: in
     print(f"Loading dataset from: {TEST_DATA_DIR}")
     try:
         # EXP 8 uses 224x224 native dataset
-        dataset = HoloDataset(data_dir=TEST_DATA_DIR, target_size=IMG_SIZE, img_dim=IMG_SIZE)
+        dataset = HoloDataset(data_dir=data_dir, target_size=IMG_SIZE, img_dim=IMG_SIZE)
     except Exception as e:  # noqa: BLE001
         print(f"Error loading dataset: {e}")
         return None
@@ -110,21 +113,21 @@ def calculate_metrics_on_dataset(model_path: str, data_dir: str, num_samples: in
             pred_c = torch.complex(clean_pred[:, 0, :, :], clean_pred[:, 1, :, :])
             pred_amp = torch.abs(pred_c).squeeze().cpu().numpy()
             pred_phase = torch.angle(pred_c).squeeze().cpu().numpy()
-            
+
             # Ground Truth
             gt_c = torch.complex(gt_obj_t[0], gt_obj_t[1])
             gt_amp = torch.abs(gt_c).numpy()
             gt_phase = torch.angle(gt_c).numpy()
-            
+
             # --- 1. AMPLITUDE METRICS ---
             # Clip for stability
             pred_amp_c = np.clip(pred_amp, 0, 1.2)
             gt_amp_c = np.clip(gt_amp, 0, 1.2)
-            
+
             val_amp_mse = mse(gt_amp_c, pred_amp_c)  # type: ignore[no-untyped-call]
             val_amp_ssim = ssim(gt_amp_c, pred_amp_c, data_range=1.2)  # type: ignore[no-untyped-call]
             val_amp_psnr = psnr(gt_amp_c, pred_amp_c, data_range=1.2)  # type: ignore[no-untyped-call]
-            
+
             amp_mse_list.append(val_amp_mse)
             amp_ssim_list.append(val_amp_ssim)
             amp_psnr_list.append(val_amp_psnr)
@@ -134,11 +137,11 @@ def calculate_metrics_on_dataset(model_path: str, data_dir: str, num_samples: in
             # Direct comparison is tricky due to wrapping, but standard metrics assume linear scale.
             # We use data_range = 2 * pi.
             data_range_phase = 2 * np.pi
-            
+
             val_phase_mse = mse(gt_phase, pred_phase)  # type: ignore[no-untyped-call]
             val_phase_ssim = ssim(gt_phase, pred_phase, data_range=data_range_phase)  # type: ignore[no-untyped-call]
             val_phase_psnr = psnr(gt_phase, pred_phase, data_range=data_range_phase)  # type: ignore[no-untyped-call]
-            
+
             phase_mse_list.append(val_phase_mse)
             phase_ssim_list.append(val_phase_ssim)
             phase_psnr_list.append(val_phase_psnr)
@@ -150,10 +153,12 @@ def calculate_metrics_on_dataset(model_path: str, data_dir: str, num_samples: in
             complex_mse_list.append(val_complex_mse)
 
             if (i + 1) % 50 == 0:
-                print(f"Sample {i + 1}/{num_samples} -> Amp SSIM: {val_amp_ssim:.4f} | Phase SSIM: {val_phase_ssim:.4f}")
+                print(
+                    f"Sample {i + 1}/{num_samples} -> Amp SSIM: {val_amp_ssim:.4f} | Phase SSIM: {val_phase_ssim:.4f}"
+                )
 
     # 4. Aggregation
-    results = {
+    results: dict[str, Any] = {
         "count": num_samples,
         "amp": {
             "mse": (np.mean(amp_mse_list), np.std(amp_mse_list)),
@@ -167,7 +172,7 @@ def calculate_metrics_on_dataset(model_path: str, data_dir: str, num_samples: in
         },
         "complex": {
             "mse": (np.mean(complex_mse_list), np.std(complex_mse_list)),
-        }
+        },
     }
 
     print("\n" + "=" * 60)

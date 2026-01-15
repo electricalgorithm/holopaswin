@@ -6,7 +6,6 @@ domains of the reconstructed complex field. It also generates a comparative visu
 """
 
 import os
-from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np

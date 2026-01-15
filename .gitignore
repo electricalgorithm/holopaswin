@@ -1,6 +1,8 @@
 .venv
 __pycache__
 **/*.pth
+**/*.parquet
+**/*.png
 checkpoints/
 logs/
 .DS_Store

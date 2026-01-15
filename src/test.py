@@ -26,7 +26,7 @@ Z_DIST = 0.02
 # Define paths
 # Should point to the dataset directory relative to where script is run
 # EXP 8
-MODEL_PATH = "results/experiment8/holopaswin_exp8.pth"
+MODEL_PATH = "results/experiment9/holopaswin_exp9.pth"
 TEST_DATA_DIR = "../hologen/test-dataset-224"
 
 # Number of samples to test

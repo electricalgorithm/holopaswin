@@ -32,8 +32,8 @@ LR = 1e-4
 NUM_EPOCHS = 5  # Adjusted based on convergence speed
 ENABLE_DEMO_MODE = False
 DEMO_BATCH_LIMIT = 20
-EXP_DIR = "results/experiment8"
-MODEL_SAVE_PATH = f"{EXP_DIR}/holopaswin_exp8.pth"
+EXP_DIR = "results/experiment9"
+MODEL_SAVE_PATH = f"{EXP_DIR}/holopaswin_exp9.pth"
 
 
 def main() -> None:  # noqa: C901, PLR0915, PLR0912
@@ -47,7 +47,7 @@ def main() -> None:  # noqa: C901, PLR0915, PLR0912
 
     The training uses physics-constrained loss combining structural L1,
     Phase, Amplitude, and Frequency loss. The best model (lowest validation loss)
-    is saved in 'results/experiment8/holopaswin_exp8.pth'.
+    is saved in 'results/experiment9/holopaswin_exp9.pth'.
     """
     # Create experiment directory
     Path(EXP_DIR).mkdir(parents=True, exist_ok=True)
@@ -111,10 +111,20 @@ def main() -> None:  # noqa: C901, PLR0915, PLR0912
     val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE * 2, shuffle=False, num_workers=num_workers)
 
     # --- Training Loop ---
+    start_epoch = 0
     best_val_loss = float("inf")
 
+    # Resume Logic (Minimal)
+    load_checkpoint = "interrupted_swin_holo.pth"
+    if Path(load_checkpoint).exists():
+        print(f"Loading checkpoint from {load_checkpoint}...")
+        model.load_state_dict(torch.load(load_checkpoint, map_location=device))
+        start_epoch = 1  # Resume from epoch 2
+        best_val_loss = 0.2479
+        print(f"Resuming from Epoch {start_epoch + 1}, Best Val Loss: {best_val_loss}")
+
     try:
-        for epoch in range(NUM_EPOCHS):
+        for epoch in range(start_epoch, NUM_EPOCHS):
             print(f"\nEpoch {epoch + 1}/{NUM_EPOCHS}")
 
             # 1. TRAINING PHASE

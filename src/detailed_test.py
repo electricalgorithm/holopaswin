@@ -24,10 +24,30 @@ PIXEL_SIZE = 4.65e-6
 Z_DIST = 0.02
 BATCH_SIZE = 1
 
-MODEL_PATH = "results/experiment5/best_swin_holo.pth"
-DATA_DIR = "results/experiment5/test-dataset"
+MODEL_PATH = "results/experiment9/holopaswin_exp9.pth"
+DATA_DIR = "../hologen/test-dataset-224"
 OUTPUT_IMG = "detailed_test_comparison.png"
 NUM_SAMPLES = 10
+
+
+def compute_bs_ratio(pred_amp, gt_amp):
+    """Compute Background-to-Signal Ratio (B/S).
+    Measures the standard deviation in background vs signal contrast.
+    Uses the predicted background level to be scale-invariant.
+    Lower is better (indicates cleaner background).
+    """
+    # Background is where gt_amp > 0.98
+    bg_mask = gt_amp > 0.98
+    obj_mask = gt_amp <= 0.98
+
+    if not np.any(bg_mask) or not np.any(obj_mask):
+        return 0.0
+
+    bg_level = np.mean(pred_amp[bg_mask])
+    bg_fluctuation = np.std(pred_amp[bg_mask])
+    obj_contrast = np.mean(np.abs(bg_level - pred_amp[obj_mask]))
+
+    return bg_fluctuation / (obj_contrast + 1e-8)
 
 
 def evaluate_detailed_metrics(model_path: str, data_dir: str) -> None:  # noqa: PLR0915
@@ -72,14 +92,17 @@ def evaluate_detailed_metrics(model_path: str, data_dir: str) -> None:  # noqa: 
     for ax, col in zip(axes[0], cols, strict=False):
         ax.set_title(col, fontsize=12, fontweight="bold")
 
-    print("\n" + "=" * 80)
-    print(f"{'Sample':<8} | {'Amp SSIM':<10} | {'Amp PSNR':<10} | {'Phase SSIM':<10} | {'Phase PSNR':<10}")
-    print("-" * 80)
+    print("\n" + "=" * 95)
+    print(
+        f"{'Sample':<8} | {'Amp SSIM':<10} | {'Amp PSNR':<10} | {'Phase SSIM':<10} | {'Phase PSNR':<10} | {'B/S Ratio':<10}"
+    )
+    print("-" * 95)
 
     avg_amp_ssim = 0.0
     avg_amp_psnr = 0.0
     avg_phase_ssim = 0.0
     avg_phase_psnr = 0.0
+    avg_bs_ratio = 0.0
 
     with torch.no_grad():
         for i, idx in enumerate(indices):
@@ -119,15 +142,17 @@ def evaluate_detailed_metrics(model_path: str, data_dir: str) -> None:  # noqa: 
 
             score_phase_ssim = ssim(gt_phase, pred_phase, data_range=data_range_phase)  # type: ignore[no-untyped-call]
             score_phase_psnr = psnr(gt_phase, pred_phase, data_range=data_range_phase)  # type: ignore[no-untyped-call]
+            score_bs_ratio = compute_bs_ratio(pred_amp, gt_amp)
 
             # Accumulate
             avg_amp_ssim += score_amp_ssim
             avg_amp_psnr += score_amp_psnr
             avg_phase_ssim += score_phase_ssim
             avg_phase_psnr += score_phase_psnr
+            avg_bs_ratio += score_bs_ratio
 
             print(
-                f"{i:<8} | {score_amp_ssim:.4f}     | {score_amp_psnr:.2f} dB    | {score_phase_ssim:.4f}       | {score_phase_psnr:.2f} dB"
+                f"{i:<8} | {score_amp_ssim:.4f}     | {score_amp_psnr:.2f} dB    | {score_phase_ssim:.4f}       | {score_phase_psnr:.2f} dB   | {score_bs_ratio:.4f}"
             )
 
             # --- PLOTTING ---
@@ -154,12 +179,13 @@ def evaluate_detailed_metrics(model_path: str, data_dir: str) -> None:  # noqa: 
     avg_amp_psnr /= NUM_SAMPLES
     avg_phase_ssim /= NUM_SAMPLES
     avg_phase_psnr /= NUM_SAMPLES
+    avg_bs_ratio /= NUM_SAMPLES
 
-    print("-" * 80)
+    print("-" * 95)
     print(
-        f"{'AVERAGE':<8} | {avg_amp_ssim:.4f}     | {avg_amp_psnr:.2f} dB    | {avg_phase_ssim:.4f}       | {avg_phase_psnr:.2f} dB"
+        f"{'AVERAGE':<8} | {avg_amp_ssim:.4f}     | {avg_amp_psnr:.2f} dB    | {avg_phase_ssim:.4f}       | {avg_phase_psnr:.2f} dB   | {avg_bs_ratio:.4f}"
     )
-    print("=" * 80)
+    print("=" * 95)
 
     plt.tight_layout()
     plt.savefig(OUTPUT_IMG, dpi=150)

@@ -1,0 +1,48 @@
+Starting Ablation Study on mps...
+Found 100 hologram parquet files.
+Indexing dataset...
+Indexed 25000 samples.
+Found 2 hologram parquet files.
+Indexing dataset...
+Indexed 496 samples.
+
+Evaluating: L1 Only (Complex)
+  Step 20/100 - Loss: 0.0427
+  Step 40/100 - Loss: 0.0255
+  Step 60/100 - Loss: 0.0203
+  Step 80/100 - Loss: 0.0177
+  Step 100/100 - Loss: 0.0169
+  Results: Amp SSIM: 0.8822, Phase SSIM: 0.9364, Freq SSIM: -0.1417, B/S: 0.7846
+
+Evaluating: Structural (Amp+Phase)
+  Step 20/100 - Loss: 0.0370
+  Step 40/100 - Loss: 0.0224
+  Step 60/100 - Loss: 0.0167
+  Step 80/100 - Loss: 0.0165
+  Step 100/100 - Loss: 0.0182
+  Results: Amp SSIM: 0.9027, Phase SSIM: 0.9446, Freq SSIM: -0.1138, B/S: 0.6032
+
+Evaluating: HoloPASWIN (Full Sup)
+  Step 20/100 - Loss: 0.2595
+  Step 40/100 - Loss: 0.1986
+  Step 60/100 - Loss: 0.1979
+  Step 80/100 - Loss: 0.1746
+  Step 100/100 - Loss: 0.1731
+  Results: Amp SSIM: 0.9267, Phase SSIM: 0.9258, Freq SSIM: 0.2552, B/S: 0.7883
+
+Evaluating: HoloPASWIN + Phys
+  Step 20/100 - Loss: 0.2552
+  Step 40/100 - Loss: 0.2067
+  Step 60/100 - Loss: 0.1798
+  Step 80/100 - Loss: 0.1781
+  Step 100/100 - Loss: 0.1774
+  Results: Amp SSIM: 0.8231, Phase SSIM: 0.9273, Freq SSIM: 0.2614, B/S: 0.8928
+
+===============================================================================================
+Configuration             | Amp SSIM   | Phase SSIM | Freq SSIM  | B/S Ratio 
+-----------------------------------------------------------------------------------------------
+L1 Only (Complex)         | 0.8822     | 0.9364     | -0.1417    | 0.7846    
+Structural (Amp+Phase)    | 0.9027     | 0.9446     | -0.1138    | 0.6032    
+HoloPASWIN (Full Sup)     | 0.9267     | 0.9258     | 0.2552     | 0.7883    
+HoloPASWIN + Phys         | 0.8231     | 0.9273     | 0.2614     | 0.8928    
+===============================================================================================

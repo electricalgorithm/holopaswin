@@ -1,3 +1,5 @@
+"""Hugging Face Model Publisher for HoloPASWIN results."""
+
 # /// script
 # requires-python = ">=3.11"
 # dependencies = [
@@ -6,10 +8,12 @@
 # ///
 import argparse
 from pathlib import Path
+
 from huggingface_hub import HfApi
 
 
 def main() -> None:
+    """Upload model to Hugging Face Hub."""
     parser = argparse.ArgumentParser(description="Upload model to Hugging Face Hub")
     parser.add_argument("--repo_id", type=str, required=True, help="Target Hugging Face Repo ID")
     parser.add_argument("--model_path", type=str, default="dist/holopaswin-v2", help="Local path to the model folder")
@@ -27,7 +31,7 @@ def main() -> None:
     print(f"Creating repository {args.repo_id} (Model) ...")
     try:
         api.create_repo(repo_id=args.repo_id, repo_type="model", private=args.private, exist_ok=True)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         print(f"Note on repo creation: {e}")
 
     print(f"Uploading files from {args.model_path} to {args.repo_id}...")
@@ -40,7 +44,7 @@ def main() -> None:
         )
         print("Upload complete! 🚀")
         print(f"View your model at: https://huggingface.co/{args.repo_id}")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         print(f"Upload failed: {e}")
 
 

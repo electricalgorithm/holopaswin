@@ -23,15 +23,21 @@ STEPS_PER_RUN = 100  # Short run to see trends
 DEVICE = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
 
 
-def compute_bs_ratio(pred_amp, gt_amp):
+BG_THRESHOLD = 0.98
+AMP_DATA_RANGE = 1.2
+PHASE_DATA_RANGE = 2 * np.pi
+
+
+def compute_bs_ratio(pred_amp: np.ndarray, gt_amp: np.ndarray) -> float:
     """Compute Background-to-Signal Ratio (B/S).
+
     Measures the standard deviation in background vs signal contrast.
     Uses the predicted background level to be scale-invariant.
     Lower is better (indicates cleaner background).
     """
     # Background is where gt_amp > 0.98
-    bg_mask = gt_amp > 0.98
-    obj_mask = gt_amp <= 0.98
+    bg_mask = gt_amp > BG_THRESHOLD
+    obj_mask = gt_amp <= BG_THRESHOLD
 
     if not np.any(bg_mask) or not np.any(obj_mask):
         return 0.0
@@ -40,13 +46,13 @@ def compute_bs_ratio(pred_amp, gt_amp):
     bg_fluctuation = np.std(pred_amp[bg_mask])
     obj_contrast = np.mean(np.abs(bg_level - pred_amp[obj_mask]))
 
-    return bg_fluctuation / (obj_contrast + 1e-8)
+    return float(bg_fluctuation / (obj_contrast + 1e-8))
 
 
-def get_freq_ssim(pred_amp, target_amp):
+def get_freq_ssim(pred_amp: np.ndarray, target_amp: np.ndarray) -> float:
     """Compute SSIM of the Log-FFT magnitude spectrum."""
 
-    def log_fft(img):
+    def log_fft(img: np.ndarray) -> np.ndarray:
         f = np.fft.fft2(img)
         fshift = np.fft.fftshift(f)
         mag = np.log(np.abs(fshift) + 1e-8)
@@ -56,20 +62,24 @@ def get_freq_ssim(pred_amp, target_amp):
     spec_t = log_fft(target_amp)
     # Normalize for SSIM [0, 1] roughly or just use dynamic range
     dr = spec_t.max() - spec_t.min()
-    return ssim(spec_p, spec_t, data_range=max(dr, 1.0))
+    return float(ssim(spec_p, spec_t, data_range=max(dr, 1.0)))
 
 
 class AblationLoss(PhysicsLoss):
     """Custom loss for ablation that allows overriding weights."""
 
-    def __init__(self, propagator, weights, lambda_p=0.0) -> None:
+    def __init__(self, propagator: torch.nn.Module, weights: dict, lambda_p: float = 0.0) -> None:
+        """Initialize AblationLoss with specific component weights."""
         super().__init__(propagator, lambda_physics=lambda_p)
         self.w_complex = weights.get("complex", 0.2)
         self.w_amp = weights.get("amp", 0.4)
         self.w_phase = weights.get("phase", 0.2)
         self.w_freq = weights.get("freq", 0.2)
 
-    def forward(self, pred_obj_2ch, target_obj_2ch, input_hologram):
+    def forward(
+        self, pred_obj_2ch: torch.Tensor, target_obj_2ch: torch.Tensor, input_hologram: torch.Tensor
+    ) -> torch.Tensor:
+        """Compute the weighted composite loss."""
         # Implementation copied from PhysicsLoss but with dynamic weights
         pred_complex = torch.complex(pred_obj_2ch[:, 0:1, ...], pred_obj_2ch[:, 1:2, ...])
         target_complex = torch.complex(target_obj_2ch[:, 0:1, ...], target_obj_2ch[:, 1:2, ...])
@@ -103,6 +113,7 @@ class AblationLoss(PhysicsLoss):
 
 
 def run_ablation() -> None:
+    """Run the loss component ablation study."""
     print(f"Starting Ablation Study on {DEVICE}...")
 
     # Configurations
@@ -149,23 +160,21 @@ def run_ablation() -> None:
 
         # Training
         model.train()
-        step = 0
         start_time = time.time()
 
-        for holo, gt in train_loader:
+        for step, (h_batch, g_batch) in enumerate(train_loader):
             if step >= STEPS_PER_RUN:
                 break
 
-            holo, gt = holo.to(DEVICE), gt.to(DEVICE)
+            h_dev, g_dev = h_batch.to(DEVICE), g_batch.to(DEVICE)
             optimizer.zero_grad()
-            pred, _ = model(holo)
-            loss = criterion(pred, gt, holo)
+            pred, _ = model(h_dev)
+            loss = criterion(pred, g_dev, h_dev)
             loss.backward()
             optimizer.step()
 
-            step += 1
-            if step % 20 == 0:
-                print(f"  Step {step}/{STEPS_PER_RUN} - Loss: {loss.item():.4f}")
+            if (step + 1) % 20 == 0:
+                print(f"  Step {step + 1}/{STEPS_PER_RUN} - Loss: {loss.item():.4f}")
 
         elapsed = time.time() - start_time
 
@@ -174,19 +183,19 @@ def run_ablation() -> None:
         m_amp_ssim, m_phase_ssim, m_freq_ssim, m_bs_ratio = [], [], [], []
 
         with torch.no_grad():
-            for holo, gt in test_loader:
-                holo, gt = holo.to(DEVICE), gt.to(DEVICE)
-                pred, _ = model(holo)
+            for h_batch, g_batch in test_loader:
+                h_dev, g_dev = h_batch.to(DEVICE), g_batch.to(DEVICE)
+                pred, _ = model(h_dev)
 
                 # Conversion to NumPy
                 pred_c = torch.complex(pred[:, 0], pred[:, 1]).squeeze().cpu().numpy()
-                gt_c = torch.complex(gt[:, 0], gt[:, 1]).squeeze().cpu().numpy()
+                gt_c = torch.complex(g_dev[:, 0], g_dev[:, 1]).squeeze().cpu().numpy()
 
                 pa, ta = np.abs(pred_c), np.abs(gt_c)
                 pp, tp = np.angle(pred_c), np.angle(gt_c)
 
-                m_amp_ssim.append(ssim(pa, ta, data_range=1.2))
-                m_phase_ssim.append(ssim(pp, tp, data_range=2 * np.pi))
+                m_amp_ssim.append(ssim(pa, ta, data_range=AMP_DATA_RANGE))
+                m_phase_ssim.append(ssim(pp, tp, data_range=PHASE_DATA_RANGE))
                 m_freq_ssim.append(get_freq_ssim(pa, ta))
                 m_bs_ratio.append(compute_bs_ratio(pa, ta))
 

@@ -29,16 +29,19 @@ DATA_DIR = "../hologen/test-dataset-224"
 OUTPUT_IMG = "detailed_test_comparison.png"
 NUM_SAMPLES = 10
 
+BG_THRESHOLD = 0.98
 
-def compute_bs_ratio(pred_amp, gt_amp):
+
+def compute_bs_ratio(pred_amp: np.ndarray, gt_amp: np.ndarray) -> float:
     """Compute Background-to-Signal Ratio (B/S).
+
     Measures the standard deviation in background vs signal contrast.
     Uses the predicted background level to be scale-invariant.
     Lower is better (indicates cleaner background).
     """
     # Background is where gt_amp > 0.98
-    bg_mask = gt_amp > 0.98
-    obj_mask = gt_amp <= 0.98
+    bg_mask = gt_amp > BG_THRESHOLD
+    obj_mask = gt_amp <= BG_THRESHOLD
 
     if not np.any(bg_mask) or not np.any(obj_mask):
         return 0.0
@@ -47,7 +50,7 @@ def compute_bs_ratio(pred_amp, gt_amp):
     bg_fluctuation = np.std(pred_amp[bg_mask])
     obj_contrast = np.mean(np.abs(bg_level - pred_amp[obj_mask]))
 
-    return bg_fluctuation / (obj_contrast + 1e-8)
+    return float(bg_fluctuation / (obj_contrast + 1e-8))
 
 
 def evaluate_detailed_metrics(model_path: str, data_dir: str) -> None:  # noqa: PLR0915

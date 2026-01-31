@@ -1,3 +1,5 @@
+"""Inference benchmark script for HoloPASWIN."""
+
 import time
 
 import numpy as np
@@ -16,6 +18,7 @@ WARMUP = 20
 
 
 def benchmark() -> None:
+    """Run inference benchmark on selected device."""
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     if torch.backends.mps.is_available():
         device = torch.device("mps")
@@ -26,7 +29,7 @@ def benchmark() -> None:
     model = HoloPASWIN(IMG_SIZE, WAVELENGTH, PIXEL_SIZE, Z_DIST).to(device)
     try:
         model.load_state_dict(torch.load(MODEL_PATH, map_location=device))
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         print(f"Warning: Could not load model from {MODEL_PATH}. Benchmarking with random weights. Error: {e}")
     model.eval()
 

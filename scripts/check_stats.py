@@ -17,6 +17,10 @@ WAVELENGTH = 532e-9
 PIXEL_SIZE = 4.65e-6
 Z_DIST = 0.02
 
+NUM_RANDOM_SAMPLES = 50
+PRINT_THRESHOLD = 15
+PLOT_SAMPLES = 5
+
 
 def check_gt_stats() -> None:  # noqa: PLR0915
     """Calculate and print statistics for Ground Truth vs Prediction."""
@@ -37,9 +41,9 @@ def check_gt_stats() -> None:  # noqa: PLR0915
     model.eval()
 
     # Pick random samples
-    indices = np.random.choice(len(dataset), 50, replace=False)
+    indices = np.random.choice(len(dataset), NUM_RANDOM_SAMPLES, replace=False)
 
-    print("\nChecking GT vs PRED Amplitude & Phase stats (plus DIRTY Input) for 50 random samples:")
+    print(f"\nChecking GT vs PRED Amplitude & Phase stats (plus DIRTY Input) for {NUM_RANDOM_SAMPLES} random samples:")
     print("-" * 155)
     print(
         f"{'Sample':<6} | {'GT Amp (Min/Max)':<18} | {'Pred Amp (Min/Max)':<18} | {'GT Pha (Min/Max)':<18} | {'Pred Pha (Min/Max)':<18} | {'Dirty Amp Max':<12}"
@@ -87,7 +91,7 @@ def check_gt_stats() -> None:  # noqa: PLR0915
             global_pred_phase_min = min(global_pred_phase_min, pred_phase.min())
             global_pred_phase_max = max(global_pred_phase_max, pred_phase.max())
 
-            if i < 15:  # noqa: PLR2004
+            if i < PRINT_THRESHOLD:
                 print(
                     f"{idx:<6} | {gt_amp.min():.4f}/{gt_amp.max():.4f}   | {pred_amp.min():.4f}/{pred_amp.max():.4f}   | {gt_phase.min():.4f}/{gt_phase.max():.4f}   | {pred_phase.min():.4f}/{pred_phase.max():.4f}   | {dirty_max_val:.4f}"
                 )
@@ -100,8 +104,8 @@ def check_gt_stats() -> None:  # noqa: PLR0915
 
     # --- PLOTTING ---
 
-    # Plot first 5 samples for visual inspection of ranges
-    num_samples_to_plot = 5
+    # Plot first N samples for visual inspection of ranges
+    num_samples_to_plot = PLOT_SAMPLES
     num_rows_per_sample = 2  # 1 for Spatial, 1 for Frequency (FFT)
 
     _, axes = plt.subplots(

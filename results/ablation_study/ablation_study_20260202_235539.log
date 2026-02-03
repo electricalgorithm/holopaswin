@@ -1,0 +1,76 @@
+Starting ablation study at Mon Feb  2 23:55:39 CET 2026
+This will take approximately 20 hours to complete.
+Logging to: ablation_study_20260202_235539.log
+
+[2026-02-02 22:55:40] ================================================================================
+[2026-02-02 22:55:40] SEQUENTIAL ABLATION STUDY EXECUTION
+[2026-02-02 22:55:40] ================================================================================
+[2026-02-02 22:55:40] Output directory: results/ablation_final
+[2026-02-02 22:55:40] Start time: 2026-02-02 22:55:40
+[2026-02-02 22:55:40] 
+[2026-02-02 22:55:40] 
+[2026-02-02 22:55:40] ================================================================================
+[2026-02-02 22:55:40] EXPERIMENT 1: Loss Component Ablation
+[2026-02-02 22:55:40] Expected duration: ~10 hours
+[2026-02-02 22:55:40] ================================================================================
+[2026-02-02 22:55:40] Starting: ablation_loss_components.py
+[2026-02-02 22:55:40]   Args: --output-dir results/ablation_final/loss_components
+[2026-02-02 22:55:40]   Log file: results/ablation_final/loss_components.log
+[2026-02-03 01:01:36] ✓ ablation_loss_components.py completed successfully (125.9 min)
+[2026-02-03 01:01:36] 
+[2026-02-03 01:01:36] ================================================================================
+[2026-02-03 01:01:36] EXPERIMENT 2: Loss Weight Sensitivity
+[2026-02-03 01:01:36] Expected duration: ~3-4 hours
+[2026-02-03 01:01:36] ================================================================================
+[2026-02-03 01:01:36] Starting: ablation_loss_weights_sensitivity.py
+[2026-02-03 01:01:36]   Args: --output-dir results/ablation_final/loss_weights
+[2026-02-03 01:01:36]   Log file: results/ablation_final/loss_weights.log
+[2026-02-03 03:02:05] ✓ ablation_loss_weights_sensitivity.py completed successfully (120.5 min)
+[2026-02-03 03:02:05] 
+[2026-02-03 03:02:05] ================================================================================
+[2026-02-03 03:02:05] EXPERIMENT 3: Architecture Ablation
+[2026-02-03 03:02:05] Expected duration: ~8 hours
+[2026-02-03 03:02:05] ================================================================================
+[2026-02-03 03:02:05] Starting: ablation_architecture.py
+[2026-02-03 03:02:05]   Args: --output-dir results/ablation_final/architecture
+[2026-02-03 03:02:05]   Log file: results/ablation_final/architecture.log
+[2026-02-03 07:05:09] ✓ ablation_architecture.py completed successfully (243.1 min)
+[2026-02-03 07:05:09] 
+[2026-02-03 07:05:09] ================================================================================
+[2026-02-03 07:05:09] EXPERIMENT 4: Robustness Tests
+[2026-02-03 07:05:09] Expected duration: ~1 hour
+[2026-02-03 07:05:09] ================================================================================
+[2026-02-03 07:05:09] Starting: ablation_robustness.py
+[2026-02-03 07:05:09]   Args: --model-path results/ablation_final/loss_components/full_model_best.pth --output-dir results/ablation_final/robustness
+[2026-02-03 07:05:09]   Log file: results/ablation_final/robustness.log
+[2026-02-03 07:05:16] ✗ ablation_robustness.py failed with code 1 (0.1 min)
+[2026-02-03 07:05:16] 
+[2026-02-03 07:05:16] ================================================================================
+[2026-02-03 07:05:16] EXECUTION SUMMARY
+[2026-02-03 07:05:16] ================================================================================
+[2026-02-03 07:05:16] Total time: 8.16 hours (489.6 minutes)
+[2026-02-03 07:05:16] 
+[2026-02-03 07:05:16] ✓ SUCCESS    Loss Components            125.9 min
+[2026-02-03 07:05:16] ✓ SUCCESS    Loss Weights               120.5 min
+[2026-02-03 07:05:16] ✓ SUCCESS    Architecture               243.1 min
+[2026-02-03 07:05:16] ✗ FAILED     Robustness                   0.1 min
+[2026-02-03 07:05:16] 
+[2026-02-03 07:05:16] Results saved to:
+[2026-02-03 07:05:16]   - Loss components: results/ablation_final/loss_components
+[2026-02-03 07:05:16]   - Loss weights: results/ablation_final/loss_weights
+[2026-02-03 07:05:16]   - Architecture: results/ablation_final/architecture
+[2026-02-03 07:05:16]   - Robustness: results/ablation_final/robustness
+[2026-02-03 07:05:16] 
+[2026-02-03 07:05:16] Next steps:
+[2026-02-03 07:05:16] 1. Review CSV files in each results directory
+[2026-02-03 07:05:16] 2. Copy LaTeX tables to article/src/tables/
+[2026-02-03 07:05:16] 3. Copy z_mismatch_plot.png to article/src/figs/
+[2026-02-03 07:05:16] 4. Update article tables with actual values
+[2026-02-03 07:05:16] 5. Compile article with pdflatex
+[2026-02-03 07:05:16] 
+[2026-02-03 07:05:16] End time: 2026-02-03 07:05:16
+[2026-02-03 07:05:16] ================================================================================
+
+Ablation study completed at Tue Feb  3 08:05:16 CET 2026
+Results are in: results/ablation_final/
+Shell log saved to: ablation_study_20260202_235539.log

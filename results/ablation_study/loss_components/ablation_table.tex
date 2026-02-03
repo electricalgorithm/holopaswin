@@ -1,0 +1,15 @@
+\begin{table}[h]
+\centering
+\caption{Loss function component ablation study. All models trained for 5 epochs on 25,000 samples.}
+\label{tab:loss_component_ablation}
+\begin{tabular}{@{}lcccccc@{}}
+\toprule
+\textbf{Configuration} & \textbf{Amp SSIM} & \textbf{Phase SSIM} & \textbf{Phase PSNR} & \textbf{Freq SSIM} & \textbf{B/S Ratio} \\ \midrule
+Full Model (Baseline) & 0.9592 & 0.9679 & 45.57 & 0.2125 & 0.3746 \\
+Full - L_freq & 0.7304 & 0.9656 & 46.57 & -0.0224 & 0.5301 \\
+Full - L_phy & 0.8704 & 0.9620 & 44.14 & 0.2285 & 0.7219 \\
+Only L_complex & 0.6296 & 0.9713 & 46.83 & -0.0738 & 0.5267 \\
+Pure Spatial (no L_freq, no L_phy) & 0.6252 & 0.9525 & 44.72 & -0.0641 & 0.6361 \\
+\bottomrule
+\end{tabular}
+\end{table}

@@ -28,6 +28,7 @@ class SwinTransformerSys(nn.Module):
         in_chans: int = 2,
         out_chans: int = 2,
         model_name: str = "swin_tiny_patch4_window7_224",
+        use_pretrained: bool = True,
     ) -> None:
         """Initialize the Swin Transformer U-Net.
 
@@ -37,15 +38,15 @@ class SwinTransformerSys(nn.Module):
             in_chans: Number of input channels. Defaults to 2 (Real/Imag).
             out_chans: Number of output channels. Defaults to 2 (Real/Imag).
             model_name: Name of the timm model to use. Defaults to "swin_tiny_patch4_window7_224".
+            use_pretrained: Whether to use ImageNet pretrained weights. Defaults to True.
         """
         super().__init__()
 
         # --- Encoder (Swin Transformer from timm) ---
         # We use swin_tiny_patch4_window7_224 as a lightweight base.
-        # Pretrained = True (User Request).
         self.encoder = timm.create_model(
             model_name,
-            pretrained=True,
+            pretrained=use_pretrained,
             features_only=True,
             img_size=img_size,
             in_chans=in_chans,

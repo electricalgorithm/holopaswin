@@ -28,7 +28,15 @@ class HoloPASWIN(torch.nn.Module):
     Output: Clean Object Complex
     """
 
-    def __init__(self, img_size: int, wavelength: float, pixel_size: float, z_dist: float) -> None:
+    def __init__(  # noqa: PLR0913
+        self,
+        img_size: int,
+        wavelength: float,
+        pixel_size: float,
+        z_dist: float,
+        use_pretrained: bool = True,
+        residual_mode: bool = True,
+    ) -> None:
         """Initialize the HoloPASWIN model.
 
         Args:
@@ -36,13 +44,21 @@ class HoloPASWIN(torch.nn.Module):
             wavelength: Wavelength of the light used for holography in meters (e.g., 532e-9).
             pixel_size: Physical size of each pixel in meters (e.g., 4.65e-6).
             z_dist: Propagation distance in meters (e.g., 0.02).
+            use_pretrained: Whether to use ImageNet pretrained weights for Swin Transformer.
+            residual_mode: If True, predict correction; if False, predict clean field directly.
         """
         super().__init__()
+        self.residual_mode = residual_mode
         self.propagator = AngularSpectrumPropagator((img_size, img_size), wavelength, pixel_size, z_dist)
 
         # Input to Swin is the Real and Imag parts of the back-propagated field (2 channels)
         # Output is Clean Real and Imag parts (2 channels)
-        self.swin_unet = SwinTransformerSys(img_size=img_size, in_chans=2, out_chans=2)
+        self.swin_unet = SwinTransformerSys(
+            img_size=img_size,
+            in_chans=2,
+            out_chans=2,
+            use_pretrained=use_pretrained,
+        )
 
     def forward(self, hologram: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Forward pass through the model.
@@ -71,7 +87,10 @@ class HoloPASWIN(torch.nn.Module):
         dirty_input = torch.cat([dirty_real, dirty_imag], dim=1)  # (B, 2, H, W)
 
         # Swin UNet Refinement
-        clean_2ch = self.swin_unet(dirty_input)
+        correction = self.swin_unet(dirty_input)
+
+        # Apply residual connection if enabled
+        clean_2ch = dirty_input + correction if self.residual_mode else correction
 
         # Return 2ch clean object (Real, Imag) and dirty input
         return clean_2ch, dirty_input

@@ -1,0 +1,15 @@
+\begin{table}[h]
+\centering
+\caption{Architecture ablation study comparing Swin Transformer vs ResNet-18, residual vs direct reconstruction, and pretrained vs from-scratch training.}
+\label{tab:architecture_ablation}
+\scriptsize
+\begin{tabular}{@{}lcccccc@{}}
+\toprule
+\textbf{Model} & \textbf{Params (M)} & \textbf{Inf. Time (ms)} & \textbf{Phase PSNR} & \textbf{Phase SSIM} & \textbf{B/S Ratio} \\ \midrule
+HoloPASWIN (Swin-Tiny, Pretrained, Residual) & 30.88 & 12.1 & 43.58 & 0.9371 & 0.6816 \\
+ResNet-18 U-Net (Pretrained, Residual) & 15.56 & 9.0 & 41.08 & 0.7524 & 0.7102 \\
+HoloPASWIN (Swin-Tiny, Pretrained, Direct) & 30.88 & 13616.0 & 44.60 & 0.9589 & 0.5660 \\
+HoloPASWIN (Swin-Tiny, From Scratch, Residual) & 30.88 & 39.1 & 42.09 & 0.9568 & 1.2116 \\
+\bottomrule
+\end{tabular}
+\end{table}

@@ -1,0 +1,41 @@
+Using device: mps
+Loading model from: results/ablation_study/loss_components/full_model_best.pth
+Found 2 hologram parquet files.
+Indexing dataset...
+Indexed 496 samples.
+
+================================================================================
+TEST 1: Z-Mismatch Robustness
+================================================================================
+
+Testing z-mismatch robustness...
+  Testing z = 19.0 mm
+  Testing z = 19.5 mm                           
+  Testing z = 20.0 mm                           
+  Testing z = 20.5 mm                           
+  Testing z = 21.0 mm                           
+                                                
+Z-mismatch results:
+ z_mm  z_offset_mm  phase_psnr  phase_psnr_std  phase_ssim  phase_ssim_std
+ 19.0         -1.0   45.676394        1.710668    0.969301        0.010385
+ 19.5         -0.5   45.676394        1.710668    0.969301        0.010385
+ 20.0          0.0   45.676394        1.710668    0.969301        0.010385
+ 20.5          0.5   45.676394        1.710668    0.969301        0.010385
+ 21.0          1.0   45.676394        1.710668    0.969301        0.010385
+  Saved plot to: results/ablation_final/robustness/z_mismatch_plot.png
+
+================================================================================
+TEST 2: Noise Configuration Sensitivity
+================================================================================
+
+Testing noise configuration sensitivity...
+  Note: Testing on mixed noise dataset (noise-specific datasets not found)
+Found 2 hologram parquet files.
+Indexing dataset...
+Indexed 496 samples.
+                                                
+Noise sensitivity results:
+ noise_type  phase_psnr  phase_psnr_std  phase_ssim  phase_ssim_std
+Mixed (All)    45.57351        1.607883    0.967917        0.010231
+
+All results saved to: results/ablation_final/robustness

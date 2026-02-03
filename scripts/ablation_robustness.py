@@ -62,12 +62,12 @@ def test_z_mismatch(
             gt_obj = gt_obj.unsqueeze(0).to(device)
 
             # Reconstruct with different z
+            # Temporarily replace the model's propagator with the test propagator
+            original_propagator = model.propagator
+            model.propagator = propagator
+            
             with torch.no_grad():
-                _ = propagator(hologram, backward=True)
-
-                # Use model's refinement (but with different initial reconstruction)
-                # Note: This is a simplified test; ideally we'd retrain at each z
-                # For now, we just test how the model handles different input reconstructions
+                # Now the model will use the test z-distance
                 pred, _ = model(hologram)
 
             # Compute metrics on phase
@@ -79,6 +79,9 @@ def test_z_mismatch(
 
             phase_psnrs.append(psnr(gt_phase, pred_phase, data_range=PHASE_DATA_RANGE))
             phase_ssims.append(ssim(pred_phase, gt_phase, data_range=PHASE_DATA_RANGE))
+            
+            # Restore original propagator
+            model.propagator = original_propagator
 
         results.append(
             {

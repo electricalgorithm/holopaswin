@@ -10,18 +10,18 @@ TEST 1: Z-Mismatch Robustness
 
 Testing z-mismatch robustness...
   Testing z = 19.0 mm
-  Testing z = 19.5 mm                           
-  Testing z = 20.0 mm                           
-  Testing z = 20.5 mm                           
-  Testing z = 21.0 mm                           
-                                                
+  Testing z = 19.5 mm                                                                                                                                                                                                                                      
+  Testing z = 20.0 mm                                                                                                                                                                                                                                      
+  Testing z = 20.5 mm                                                                                                                                                                                                                                      
+  Testing z = 21.0 mm                                                                                                                                                                                                                                      
+                                                                                                                                                                                                                                                           
 Z-mismatch results:
  z_mm  z_offset_mm  phase_psnr  phase_psnr_std  phase_ssim  phase_ssim_std
- 19.0         -1.0   45.676394        1.710668    0.969301        0.010385
- 19.5         -0.5   45.676394        1.710668    0.969301        0.010385
+ 19.0         -1.0   10.009516        0.015396   -0.006307        0.001974
+ 19.5         -0.5   16.094277        0.044961   -0.011280        0.003844
  20.0          0.0   45.676394        1.710668    0.969301        0.010385
- 20.5          0.5   45.676394        1.710668    0.969301        0.010385
- 21.0          1.0   45.676394        1.710668    0.969301        0.010385
+ 20.5          0.5   11.492654        0.026811    0.007203        0.001695
+ 21.0          1.0    9.035218        0.015454    0.005983        0.001435
   Saved plot to: results/ablation_final/robustness/z_mismatch_plot.png
 
 ================================================================================
@@ -33,7 +33,7 @@ Testing noise configuration sensitivity...
 Found 2 hologram parquet files.
 Indexing dataset...
 Indexed 496 samples.
-                                                
+                                                                                                                                                                                                                                                           
 Noise sensitivity results:
  noise_type  phase_psnr  phase_psnr_std  phase_ssim  phase_ssim_std
 Mixed (All)    45.57351        1.607883    0.967917        0.010231

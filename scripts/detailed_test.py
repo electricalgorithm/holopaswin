@@ -23,8 +23,9 @@ WAVELENGTH = 532e-9
 PIXEL_SIZE = 4.65e-6
 Z_DIST = 0.02
 BATCH_SIZE = 1
+RESIDUAL_MODE = False  # Experiment 10 uses direct mode
 
-MODEL_PATH = "results/experiment9/holopaswin_exp9.pth"
+MODEL_PATH = "results/experiment10_fixed/holopaswin_exp10_fixed.pth"
 DATA_DIR = "../hologen/test-dataset-224"
 OUTPUT_IMG = "detailed_test_comparison.png"
 NUM_SAMPLES = 10
@@ -65,7 +66,7 @@ def evaluate_detailed_metrics(model_path: str, data_dir: str) -> None:  # noqa: 
         print(f"Model not found at {model_path}")
         return
 
-    model = HoloPASWIN(IMG_SIZE, WAVELENGTH, PIXEL_SIZE, Z_DIST).to(device)
+    model = HoloPASWIN(IMG_SIZE, WAVELENGTH, PIXEL_SIZE, Z_DIST, residual_mode=RESIDUAL_MODE).to(device)
     try:
         model.load_state_dict(torch.load(model_path, map_location=device))
     except Exception as e:  # noqa: BLE001

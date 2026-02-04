@@ -22,11 +22,12 @@ IMG_SIZE = 224
 WAVELENGTH = 532e-9
 PIXEL_SIZE = 4.65e-6
 Z_DIST = 0.02
+RESIDUAL_MODE = False
 
 # Define paths
 # Should point to the dataset directory relative to where script is run
 # EXP 8
-MODEL_PATH = "results/experiment9/holopaswin_exp9.pth"
+MODEL_PATH = "results/experiment11/holopaswin_exp11.pth"
 TEST_DATA_DIR = "../hologen/test-dataset-224"
 
 # Number of samples to test
@@ -56,7 +57,7 @@ def calculate_metrics_on_dataset(  # noqa: PLR0915
         print(f"Model not found at {model_path}")
         return None
 
-    model = HoloPASWIN(IMG_SIZE, WAVELENGTH, PIXEL_SIZE, Z_DIST).to(device)
+    model = HoloPASWIN(IMG_SIZE, WAVELENGTH, PIXEL_SIZE, Z_DIST, residual_mode=RESIDUAL_MODE).to(device)
     try:
         model.load_state_dict(torch.load(model_path, map_location=device))
     except Exception as e:  # noqa: BLE001
@@ -67,7 +68,6 @@ def calculate_metrics_on_dataset(  # noqa: PLR0915
     # 2. Load Dataset
     print(f"Loading dataset from: {TEST_DATA_DIR}")
     try:
-        # EXP 8 uses 224x224 native dataset
         dataset = HoloDataset(data_dir=data_dir, target_size=IMG_SIZE, img_dim=IMG_SIZE)
     except Exception as e:  # noqa: BLE001
         print(f"Error loading dataset: {e}")

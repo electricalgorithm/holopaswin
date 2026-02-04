@@ -1,0 +1,34 @@
+--- Starting Evaluation on mps ---
+Loading dataset from: ../hologen/test-dataset-224
+Found 2 hologram parquet files.
+Indexing dataset...
+Indexed 496 samples.
+Evaluating on 496 random samples...
+Sample 50/496 -> Amp SSIM: 0.9529 | Phase SSIM: 0.9669
+Sample 100/496 -> Amp SSIM: 0.9633 | Phase SSIM: 0.9732
+Sample 150/496 -> Amp SSIM: 0.9612 | Phase SSIM: 0.9772
+Sample 200/496 -> Amp SSIM: 0.9589 | Phase SSIM: 0.9740
+Sample 250/496 -> Amp SSIM: 0.9582 | Phase SSIM: 0.9718
+Sample 300/496 -> Amp SSIM: 0.9501 | Phase SSIM: 0.9719
+Sample 350/496 -> Amp SSIM: 0.9586 | Phase SSIM: 0.9716
+Sample 400/496 -> Amp SSIM: 0.9556 | Phase SSIM: 0.9718
+Sample 450/496 -> Amp SSIM: 0.9587 | Phase SSIM: 0.9720
+
+============================================================
+   FINAL MODEL ACCURACY REPORT   
+============================================================
+Evaluated on: 496 samples
+------------------------------------------------------------
+AMPLITUDE DOMAIN (Absorption/Objects)
+  MSE:  0.000247 (±0.000043)
+  SSIM: 0.9578   (±0.0033)
+  PSNR: 37.71 dB  (±0.72)
+------------------------------------------------------------
+PHASE DOMAIN (Thickness/Refractive Index)
+  MSE:  0.001569 (±0.000554)
+  SSIM: 0.9739   (±0.0056)
+  PSNR: 44.25 dB  (±1.43)
+------------------------------------------------------------
+COMPLEX DOMAIN (Overall Fidelity)
+  MSE:  0.001740 (±0.000525)
+============================================================

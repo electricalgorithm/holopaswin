@@ -25,15 +25,20 @@ IMG_SIZE = 224
 WAVELENGTH = 532e-9
 PIXEL_SIZE = 4.65e-6
 Z_DIST = 0.02
+RESIDUAL_MODE = False  # Direct reconstruction mode for Experiment 10
 
 # Training Configuration
 BATCH_SIZE = 32
 LR = 1e-4
-NUM_EPOCHS = 5  # Adjusted based on convergence speed
+NUM_EPOCHS = 15  # Continue for 10 more epochs (5+10=15 total)
 ENABLE_DEMO_MODE = False
 DEMO_BATCH_LIMIT = 20
-EXP_DIR = "results/experiment9"
-MODEL_SAVE_PATH = f"{EXP_DIR}/holopaswin_exp9.pth"
+EXP_DIR = "results/experiment11"
+MODEL_SAVE_PATH = f"{EXP_DIR}/holopaswin_exp11.pth"
+
+# Resume from checkpoint (set to None for fresh training)
+RESUME_CHECKPOINT = "results/experiment10/holopaswin_exp10.pth"
+START_EPOCH = 5  # Resume from epoch 5
 
 
 def main() -> None:  # noqa: C901, PLR0915, PLR0912
@@ -60,8 +65,15 @@ def main() -> None:  # noqa: C901, PLR0915, PLR0912
         device = torch.device("cpu")
     print(f"Using device: {device}")
 
-    # Initialize Model
-    model = HoloPASWIN(IMG_SIZE, WAVELENGTH, PIXEL_SIZE, Z_DIST).to(device)
+    # Initialize Model - Using Direct Connection for Experiment 10
+    model = HoloPASWIN(
+        IMG_SIZE,
+        WAVELENGTH,
+        PIXEL_SIZE,
+        Z_DIST,
+        use_pretrained=True,
+        residual_mode=RESIDUAL_MODE
+    ).to(device)
 
     # Physics Loss Wrapper
     # We share the propagator from the model to ensure parameters match
@@ -114,14 +126,12 @@ def main() -> None:  # noqa: C901, PLR0915, PLR0912
     start_epoch = 0
     best_val_loss = float("inf")
 
-    # Resume Logic (Minimal)
-    load_checkpoint = "interrupted_swin_holo.pth"
-    if Path(load_checkpoint).exists():
-        print(f"Loading checkpoint from {load_checkpoint}...")
-        model.load_state_dict(torch.load(load_checkpoint, map_location=device))
-        start_epoch = 1  # Resume from epoch 2
-        best_val_loss = 0.2479
-        print(f"Resuming from Epoch {start_epoch + 1}, Best Val Loss: {best_val_loss}")
+    # Resume Logic
+    if RESUME_CHECKPOINT and Path(RESUME_CHECKPOINT).exists():
+        print(f"Loading checkpoint from: {RESUME_CHECKPOINT}")
+        model.load_state_dict(torch.load(RESUME_CHECKPOINT, map_location=device, weights_only=True))
+        start_epoch = START_EPOCH
+        print(f"Resuming from epoch {start_epoch + 1}")
 
     try:
         for epoch in range(start_epoch, NUM_EPOCHS):

@@ -22,13 +22,13 @@ IMG_SIZE = 224
 WAVELENGTH = 532e-9
 PIXEL_SIZE = 4.65e-6
 Z_DIST = 0.02
-RESIDUAL_MODE = False
+RESIDUAL_MODE = True
 
 # Define paths
 # Should point to the dataset directory relative to where script is run
 # EXP 8
-MODEL_PATH = "results/experiment11/holopaswin_exp11.pth"
-TEST_DATA_DIR = "../hologen/test-dataset-224"
+MODEL_PATH = "holopaswin/results/experiment12/holopaswin_exp12.pth"
+TEST_DATA_DIR = "hologen/test-dataset-224"
 
 # Number of samples to test
 SAMPLES_TO_TEST = 500

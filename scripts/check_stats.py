@@ -8,10 +8,10 @@ import torch.utils.data
 from holopaswin.dataset import HoloDataset
 from holopaswin.model import HoloPASWIN
 
-DATA_DIR = "../hologen/test-dataset-224"
+DATA_DIR = "hologen/test-dataset-224"
 IMG_SIZE = 224
 
-MODEL_PATH = "results/experiment11/holopaswin_exp11.pth"
+MODEL_PATH = "holopaswin/results/experiment12/holopaswin_exp12.pth"
 # Model Config
 WAVELENGTH = 532e-9
 PIXEL_SIZE = 4.65e-6

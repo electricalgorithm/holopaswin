@@ -25,20 +25,20 @@ IMG_SIZE = 224
 WAVELENGTH = 532e-9
 PIXEL_SIZE = 4.65e-6
 Z_DIST = 0.02
-RESIDUAL_MODE = False  # Direct reconstruction mode for Experiment 10
+RESIDUAL_MODE = True  # Residual mode for Experiment 12
 
 # Training Configuration
 BATCH_SIZE = 32
 LR = 1e-4
-NUM_EPOCHS = 15  # Continue for 10 more epochs (5+10=15 total)
+NUM_EPOCHS = 30
 ENABLE_DEMO_MODE = False
 DEMO_BATCH_LIMIT = 20
-EXP_DIR = "results/experiment11"
-MODEL_SAVE_PATH = f"{EXP_DIR}/holopaswin_exp11.pth"
+EXP_DIR = "results/experiment12"
+MODEL_SAVE_PATH = f"{EXP_DIR}/holopaswin_exp12.pth"
 
 # Resume from checkpoint (set to None for fresh training)
-RESUME_CHECKPOINT = "results/experiment10/holopaswin_exp10.pth"
-START_EPOCH = 5  # Resume from epoch 5
+RESUME_CHECKPOINT = None
+START_EPOCH = 0
 
 
 def main() -> None:  # noqa: C901, PLR0915, PLR0912

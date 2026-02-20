@@ -1,0 +1,18 @@
+\begin{table}[h]
+\centering
+\caption{Baseline comparison on test set. Best values in \textbf{bold}, second-best \underline{underlined}. B/S$\downarrow$ indicates lower is better.}
+\label{tab:baseline_comparison}
+\small
+\begin{tabular}{@{}lccccccc@{}}
+\toprule
+\textbf{Method} & \textbf{Phase PSNR} & \textbf{Phase SSIM} & \textbf{Amp. SSIM} & \textbf{B/S$\downarrow$} & \textbf{Time (ms)} & \textbf{Params (M)} \\
+\midrule
+ASM (dirty) & 34.69 & 0.3038 & 0.6129 & 0.9882 & 2.3 & — \\
+GS (50 iter) & 34.69 & 0.3038 & 0.6129 & 0.9882 & 58.6 & — \\
+GS (100 iter) & 34.69 & 0.3038 & 0.6129 & 0.9882 & 79.9 & — \\
+U-Net & 53.91 & 0.9916 & 0.9917 & 0.1030 & 22.7 & 31.04 \\
+ResNet-U-Net & 41.06 & 0.7529 & 0.4743 & 0.6927 & 10.3 & 15.56 \\
+HoloPASWIN (ours) & 46.55 & 0.9862 & 0.9625 & 0.1837 & 13.2 & 30.88 \\
+\bottomrule
+\end{tabular}
+\end{table}

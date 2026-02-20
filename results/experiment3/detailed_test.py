@@ -3,7 +3,7 @@
 This script performs a deep-dive analysis on a small subset of the test dataset (10 samples).
 It computes and reports SSIM and PSNR separately for the Magnitude (Amplitude) and Phase
 domains of the reconstructed complex field. It also generates a comparative visualization.
-"""
+"""  # noqa: INP001
 
 import os
 
@@ -45,7 +45,7 @@ def evaluate_detailed_metrics(model_path: str, data_dir: str) -> None:  # noqa: 
     model = HoloPASWIN(IMG_SIZE, WAVELENGTH, PIXEL_SIZE, Z_DIST).to(device)
     try:
         model.load_state_dict(torch.load(model_path, map_location=device))
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         print(f"Error loading weights: {e}")
         return
     model.eval()
@@ -54,7 +54,7 @@ def evaluate_detailed_metrics(model_path: str, data_dir: str) -> None:  # noqa: 
     print(f"Loading dataset from {data_dir}...")
     try:
         dataset = HoloDataset(data_dir, target_size=IMG_SIZE)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         print(f"Error loading dataset: {e}")
         return
 
@@ -67,7 +67,7 @@ def evaluate_detailed_metrics(model_path: str, data_dir: str) -> None:  # noqa: 
     print(f"Selected indices: {indices}")
 
     # Prepare plotting
-    fig, axes = plt.subplots(NUM_SAMPLES, 5, figsize=(20, 4 * NUM_SAMPLES))
+    _fig, axes = plt.subplots(NUM_SAMPLES, 5, figsize=(20, 4 * NUM_SAMPLES))
     cols = ["Hologram", "Pred Amp", "GT Amp", "Pred Phase", "GT Phase"]
     for ax, col in zip(axes[0], cols, strict=False):
         ax.set_title(col, fontsize=12, fontweight="bold")

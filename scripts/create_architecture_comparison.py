@@ -55,7 +55,7 @@ MODELS = [
 ]
 
 
-def load_model(model_config):
+def load_model(model_config):  # noqa: ANN001, ANN201
     """Load a model from checkpoint."""
     if model_config["type"] == "gt":
         return None
@@ -84,7 +84,7 @@ def load_model(model_config):
     return model
 
 
-def compute_bs_ratio(amplitude):
+def compute_bs_ratio(amplitude):  # noqa: ANN001, ANN201
     """Compute background-to-signal ratio."""
     threshold = np.percentile(amplitude, 75)
     background_mask = amplitude < threshold
@@ -99,7 +99,7 @@ def compute_bs_ratio(amplitude):
     return float(bg_mean / obj_mean) if obj_mean > 0 else 0.0
 
 
-def create_comparison_figure():
+def create_comparison_figure() -> None:  # noqa: PLR0915
     """Create professional architecture comparison figure."""
     print(f"Using device: {DEVICE}")
 
@@ -116,7 +116,7 @@ def create_comparison_figure():
 
     # Create figure with 2 rows (amplitude, phase) and 5 columns (models)
     fig, axes = plt.subplots(2, 5, figsize=(15, 6))
-    
+
     # Remove spacing
     plt.subplots_adjust(wspace=0.02, hspace=0.15, left=0.02, right=0.98, top=0.92, bottom=0.08)
 
@@ -124,11 +124,11 @@ def create_comparison_figure():
     gt_complex = torch.complex(gt_obj[0, 0], gt_obj[0, 1]).cpu().numpy()
     gt_amp = np.abs(gt_complex)
     gt_phase = np.angle(gt_complex)
-    
+
     # Use percentile-based normalization for better contrast
-    vmin_amp = np.percentile(gt_amp, 1)
-    vmax_amp = np.percentile(gt_amp, 99)
-    vmin_phase, vmax_phase = -np.pi, np.pi
+    np.percentile(gt_amp, 1)
+    np.percentile(gt_amp, 99)
+    _vmin_phase, _vmax_phase = -np.pi, np.pi
 
     # Process each model
     for col_idx, model_config in enumerate(MODELS):
@@ -155,9 +155,9 @@ def create_comparison_figure():
         # Use independent normalization for each image
         amp_vmin = np.percentile(pred_amp, 1)
         amp_vmax = np.percentile(pred_amp, 99)
-        im_amp = ax_amp.imshow(pred_amp, cmap="gray", vmin=amp_vmin, vmax=amp_vmax)
+        ax_amp.imshow(pred_amp, cmap="gray", vmin=amp_vmin, vmax=amp_vmax)
         ax_amp.axis("off")
-        
+
         # Add model name as column title
         ax_amp.set_title(model_config["name"], fontsize=11, pad=5)
 
@@ -165,15 +165,16 @@ def create_comparison_figure():
         ax_phase = axes[1, col_idx]
         im_phase = ax_phase.imshow(pred_phase, cmap="twilight", vmin=-np.pi, vmax=np.pi)
         ax_phase.axis("off")
-        
+
         # Add B/S ratio as text below phase for all models
         ax_phase.text(
-            0.5, -0.08,
+            0.5,
+            -0.08,
             f"B/S: {bs_ratio:.3f}",
             transform=ax_phase.transAxes,
             ha="center",
             fontsize=9,
-            family="monospace"
+            family="monospace",
         )
 
     # Add row labels on the left
@@ -184,7 +185,7 @@ def create_comparison_figure():
     cbar_ax_phase = fig.add_axes([0.99, 0.10, 0.01, 0.80])
     cbar_phase = fig.colorbar(im_phase, cax=cbar_ax_phase)
     cbar_phase.set_label("Phase (rad)", fontsize=10)
-    cbar_phase.set_ticks([-np.pi, -np.pi/2, 0, np.pi/2, np.pi])
+    cbar_phase.set_ticks([-np.pi, -np.pi / 2, 0, np.pi / 2, np.pi])
     cbar_phase.set_ticklabels([r"$-\pi$", r"$-\pi/2$", "0", r"$\pi/2$", r"$\pi$"])
 
     # Save figure

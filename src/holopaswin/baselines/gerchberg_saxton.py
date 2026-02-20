@@ -29,7 +29,7 @@ class GerchbergSaxton(nn.Module):
     We wrap it as nn.Module for API consistency with other models.
     """
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         img_size: int,
         wavelength: float,
@@ -75,7 +75,6 @@ class GerchbergSaxton(nn.Module):
         # Ensure we're not computing gradients (iterative, not differentiable)
         with torch.no_grad():
             batch_size = hologram.shape[0]
-            device = hologram.device
 
             # Initialize: sqrt(hologram) with zero phase at sensor plane
             # Add small epsilon to avoid sqrt(0) issues
@@ -113,8 +112,7 @@ class GerchbergSaxton(nn.Module):
 
                 # Soft support: multiply amplitude by mask (0 outside, 1 inside)
                 # This is a gentler constraint than hard masking
-                constrained_amp = object_amp * support_mask.float() + \
-                                  object_amp * (1 - support_mask.float()) * 0.1
+                constrained_amp = object_amp * support_mask.float() + object_amp * (1 - support_mask.float()) * 0.1
 
                 # Reconstruct complex field
                 object_field = constrained_amp * torch.exp(1j * object_phase)
@@ -130,15 +128,10 @@ class GerchbergSaxton(nn.Module):
             recovered_object = self.propagator(current_field, backward=True)
 
             # Convert to 2-channel format (Real, Imag) for API consistency
-            recovered_2ch = torch.cat(
-                [recovered_object.real, recovered_object.imag], dim=1
-            )
+            recovered_2ch = torch.cat([recovered_object.real, recovered_object.imag], dim=1)
 
             return recovered_2ch, dirty_2ch
 
     def __repr__(self) -> str:
-        """String representation."""
-        return (
-            f"GerchbergSaxton(iterations={self.iterations}, "
-            f"support_threshold={self.support_threshold})"
-        )
+        """String representation."""  # noqa: D401
+        return f"GerchbergSaxton(iterations={self.iterations}, support_threshold={self.support_threshold})"

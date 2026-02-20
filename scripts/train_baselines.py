@@ -25,9 +25,9 @@ from holopaswin.resnet_unet import ResNetUNet
 
 # Optics configuration (same as HoloPASWIN)
 IMG_SIZE = 224
-WAVELENGTH = 532e-9      # 532 nm
-PIXEL_SIZE = 4.65e-6     # 4.65 µm
-Z_DIST = 0.02            # 20 mm
+WAVELENGTH = 532e-9  # 532 nm
+PIXEL_SIZE = 4.65e-6  # 4.65 µm
+Z_DIST = 0.02  # 20 mm
 
 # Training configuration
 BATCH_SIZE = 32
@@ -45,7 +45,7 @@ def get_model(model_name: str) -> torch.nn.Module:
             z_distance=Z_DIST,
             residual_mode=True,
         )
-    elif model_name == "resnet_unet":
+    if model_name == "resnet_unet":
         return ResNetUNet(
             img_size=IMG_SIZE,
             wavelength=WAVELENGTH,
@@ -53,11 +53,10 @@ def get_model(model_name: str) -> torch.nn.Module:
             z_distance=Z_DIST,
             residual_mode=True,
         )
-    else:
-        raise ValueError(f"Unknown model: {model_name}")
+    raise ValueError(f"Unknown model: {model_name}")
 
 
-def train(
+def train(  # noqa: PLR0913
     model: torch.nn.Module,
     train_loader: DataLoader,  # type: ignore[type-arg]
     val_loader: DataLoader,  # type: ignore[type-arg]
@@ -97,8 +96,8 @@ def train(
 
         progress = tqdm(train_loader, desc=f"Epoch {epoch + 1}/{num_epochs} [Train]")
         for hologram, gt_object in progress:
-            hologram = hologram.to(device)
-            gt_object = gt_object.to(device)
+            hologram = hologram.to(device)  # noqa: PLW2901
+            gt_object = gt_object.to(device)  # noqa: PLW2901
 
             optimizer.zero_grad()
             pred_clean, _ = model(hologram)
@@ -119,8 +118,8 @@ def train(
 
         with torch.no_grad():
             for hologram, gt_object in tqdm(val_loader, desc=f"Epoch {epoch + 1}/{num_epochs} [Val]", leave=False):
-                hologram = hologram.to(device)
-                gt_object = gt_object.to(device)
+                hologram = hologram.to(device)  # noqa: PLW2901
+                gt_object = gt_object.to(device)  # noqa: PLW2901
 
                 pred_clean, _ = model(hologram)
                 loss = criterion(pred_clean, gt_object, hologram)
@@ -131,11 +130,13 @@ def train(
 
         print(f"Epoch {epoch + 1}/{num_epochs} - Train: {avg_train_loss:.4f}, Val: {avg_val_loss:.4f}")
 
-        training_log.append({
-            "epoch": epoch + 1,
-            "train_loss": avg_train_loss,
-            "val_loss": avg_val_loss,
-        })
+        training_log.append(
+            {
+                "epoch": epoch + 1,
+                "train_loss": avg_train_loss,
+                "val_loss": avg_val_loss,
+            }
+        )
 
         # Save best model
         if avg_val_loss < best_val_loss:
@@ -149,7 +150,8 @@ def train(
     torch.save(model.state_dict(), final_path)
 
     # Save training log
-    import json
+    import json  # noqa: PLC0415
+
     log_path = output_dir / f"{model_name}_training_log.json"
     with log_path.open("w") as f:
         json.dump(training_log, f, indent=2)
@@ -158,7 +160,7 @@ def train(
 
 
 def main() -> None:
-    """Main training function."""
+    """Main training function."""  # noqa: D401
     parser = argparse.ArgumentParser(description="Train baseline models")
     parser.add_argument(
         "--model",
@@ -210,7 +212,7 @@ def main() -> None:
     print(f"Loading dataset from {args.data_dir}...")
     try:
         full_dataset = HoloDataset(data_dir=args.data_dir, target_size=IMG_SIZE, img_dim=IMG_SIZE)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         print(f"Error loading dataset: {e}")
         return
 
@@ -262,7 +264,7 @@ def main() -> None:
         model_name=args.model,
     )
 
-    print(f"\nTraining complete!")
+    print("\nTraining complete!")
     print(f"Best validation loss: {results['best_val_loss']:.4f}")
     print(f"Checkpoints saved to: {output_dir}")
 

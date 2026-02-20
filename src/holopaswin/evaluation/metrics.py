@@ -11,11 +11,10 @@ import numpy as np
 from skimage.metrics import peak_signal_noise_ratio as psnr
 from skimage.metrics import structural_similarity as ssim
 
-
 # Default ranges for holography domain
 PHASE_DATA_RANGE = 2 * np.pi  # Phase in [-pi, pi]
-AMPLITUDE_DATA_RANGE = 1.2     # Object amplitude typically < 1.2
-BG_THRESHOLD = 0.98            # Background is where GT amplitude > threshold
+AMPLITUDE_DATA_RANGE = 1.2  # Object amplitude typically < 1.2
+BG_THRESHOLD = 0.98  # Background is where GT amplitude > threshold
 
 
 def phase_psnr(pred_phase: np.ndarray, gt_phase: np.ndarray) -> float:
@@ -70,8 +69,7 @@ def amplitude_psnr(pred_amp: np.ndarray, gt_amp: np.ndarray) -> float:
     return float(psnr(gt_amp, pred_amp, data_range=AMPLITUDE_DATA_RANGE))  # type: ignore[no-untyped-call]
 
 
-def complex_mse(pred_real: np.ndarray, pred_imag: np.ndarray,
-                gt_real: np.ndarray, gt_imag: np.ndarray) -> float:
+def complex_mse(pred_real: np.ndarray, pred_imag: np.ndarray, gt_real: np.ndarray, gt_imag: np.ndarray) -> float:
     """Compute MSE over complex field (Real + Imag channels).
 
     Args:
@@ -130,7 +128,7 @@ def background_to_signal_ratio(
     return float(bg_std / (obj_contrast + 1e-8))
 
 
-def compute_all_metrics(
+def compute_all_metrics(  # noqa: PLR0913
     pred_amp: np.ndarray,
     pred_phase: np.ndarray,
     gt_amp: np.ndarray,

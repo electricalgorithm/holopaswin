@@ -65,7 +65,7 @@ def test_z_mismatch(
             # Temporarily replace the model's propagator with the test propagator
             original_propagator = model.propagator
             model.propagator = propagator
-            
+
             with torch.no_grad():
                 # Now the model will use the test z-distance
                 pred, _ = model(hologram)
@@ -79,7 +79,7 @@ def test_z_mismatch(
 
             phase_psnrs.append(psnr(gt_phase, pred_phase, data_range=PHASE_DATA_RANGE))
             phase_ssims.append(ssim(pred_phase, gt_phase, data_range=PHASE_DATA_RANGE))
-            
+
             # Restore original propagator
             model.propagator = original_propagator
 

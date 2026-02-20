@@ -15,13 +15,10 @@ Usage:
 """
 
 import argparse
-import time
 from pathlib import Path
 
-import numpy as np
 import torch
 from torch.utils.data import DataLoader
-from tqdm import tqdm
 
 from holopaswin.baselines.gerchberg_saxton import GerchbergSaxton
 from holopaswin.baselines.unet_baseline import UNetBaseline
@@ -33,19 +30,17 @@ from holopaswin.resnet_unet import ResNetUNet
 
 # Optics configuration (same as training)
 IMG_SIZE = 224
-WAVELENGTH = 532e-9      # 532 nm
-PIXEL_SIZE = 4.65e-6     # 4.65 µm
-Z_DIST = 0.02            # 20 mm
+WAVELENGTH = 532e-9  # 532 nm
+PIXEL_SIZE = 4.65e-6  # 4.65 µm
+Z_DIST = 0.02  # 20 mm
 
 
 class ASMBaseline(torch.nn.Module):
     """ASM-only baseline (dirty reconstruction, no learning)."""
 
-    def __init__(self, img_size: int, wavelength: float, pixel_size: float, z_distance: float) -> None:
+    def __init__(self, img_size: int, wavelength: float, pixel_size: float, z_distance: float) -> None:  # noqa: D107
         super().__init__()
-        self.propagator = AngularSpectrumPropagator(
-            (img_size, img_size), wavelength, pixel_size, z_distance
-        )
+        self.propagator = AngularSpectrumPropagator((img_size, img_size), wavelength, pixel_size, z_distance)
 
     def forward(self, hologram: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Just ASM back-propagation, no refinement."""
@@ -126,7 +121,7 @@ def main() -> None:  # noqa: PLR0915
     print(f"Loading test dataset from {args.test_data}...")
     try:
         test_dataset = HoloDataset(data_dir=args.test_data, target_size=IMG_SIZE, img_dim=IMG_SIZE)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         print(f"Error loading dataset: {e}")
         return
 
@@ -191,8 +186,12 @@ def main() -> None:  # noqa: PLR0915
         print("Evaluating: HoloPASWIN (ours)")
         print("=" * 60)
         holopaswin = HoloPASWIN(
-            IMG_SIZE, WAVELENGTH, PIXEL_SIZE, Z_DIST,
-            use_pretrained=True, residual_mode=True  # experiment9 uses residual mode
+            IMG_SIZE,
+            WAVELENGTH,
+            PIXEL_SIZE,
+            Z_DIST,
+            use_pretrained=True,
+            residual_mode=True,  # experiment9 uses residual mode
         )
         holopaswin.load_state_dict(torch.load(args.holopaswin_ckpt, map_location=device, weights_only=True))
         holopaswin_results = evaluator.evaluate_model(holopaswin, test_loader, "HoloPASWIN (ours)", args.max_samples)
@@ -226,7 +225,9 @@ def main() -> None:  # noqa: PLR0915
         params = r.get("num_parameters", 0) / 1e6
 
         params_str = f"{params:.2f}" if params > 0 else "—"
-        print(f"{model:<20} | {phase_psnr:>12.2f} | {phase_ssim:>12.4f} | {amp_ssim:>12.4f} | {bs_ratio:>10.4f} | {inf_time:>10.1f} | {params_str:>10}")
+        print(
+            f"{model:<20} | {phase_psnr:>12.2f} | {phase_ssim:>12.4f} | {amp_ssim:>12.4f} | {bs_ratio:>10.4f} | {inf_time:>10.1f} | {params_str:>10}"
+        )
 
     print("=" * 100)
     print(f"\nResults saved to: {output_dir}")

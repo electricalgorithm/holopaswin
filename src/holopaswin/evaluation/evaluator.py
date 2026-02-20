@@ -81,7 +81,7 @@ class BaselineEvaluator:
                 if max_samples and sample_count >= max_samples:
                     break
 
-                hologram = hologram.to(self.device)
+                hologram = hologram.to(self.device)  # noqa: PLW2901
 
                 # Measure inference time
                 start_time = time.time()
@@ -96,7 +96,7 @@ class BaselineEvaluator:
 
                 # Convert to numpy
                 pred_2ch = pred_clean.squeeze().cpu().numpy()  # (2, H, W)
-                gt_2ch = gt_object.squeeze().numpy()           # (2, H, W)
+                gt_2ch = gt_object.squeeze().numpy()  # (2, H, W)
 
                 # Compute amplitude and phase
                 pred_complex = pred_2ch[0] + 1j * pred_2ch[1]
@@ -109,8 +109,14 @@ class BaselineEvaluator:
 
                 # Compute metrics
                 metrics = compute_all_metrics(
-                    pred_amp, pred_phase, gt_amp, gt_phase,
-                    pred_2ch[0], pred_2ch[1], gt_2ch[0], gt_2ch[1],
+                    pred_amp,
+                    pred_phase,
+                    gt_amp,
+                    gt_phase,
+                    pred_2ch[0],
+                    pred_2ch[1],
+                    gt_2ch[0],
+                    gt_2ch[1],
                 )
                 metrics["sample_idx"] = sample_count
                 metrics["inference_time_ms"] = inference_time
@@ -138,8 +144,7 @@ class BaselineEvaluator:
             return {}
 
         # Extract metric names (exclude non-numeric fields)
-        metric_names = [k for k in per_sample[0].keys()
-                        if k not in ("sample_idx", "inference_time_ms")]
+        metric_names = [k for k in per_sample[0] if k not in ("sample_idx", "inference_time_ms")]
 
         aggregated: dict[str, float] = {}
         for name in metric_names:

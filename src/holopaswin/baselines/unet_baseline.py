@@ -21,7 +21,7 @@ class UNetBaseline(nn.Module):
     a fair baseline that doesn't rely on ImageNet pretraining.
     """
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         img_size: int,
         wavelength: float,
@@ -56,29 +56,29 @@ class UNetBaseline(nn.Module):
         c1, c2, c3, c4 = base_channels, base_channels * 2, base_channels * 4, base_channels * 8
 
         # Encoder
-        self.enc1 = self._encoder_block(2, c1)      # 224 -> 224, 64ch
-        self.pool1 = nn.MaxPool2d(2, 2)             # 224 -> 112
-        self.enc2 = self._encoder_block(c1, c2)     # 112 -> 112, 128ch
-        self.pool2 = nn.MaxPool2d(2, 2)             # 112 -> 56
-        self.enc3 = self._encoder_block(c2, c3)     # 56 -> 56, 256ch
-        self.pool3 = nn.MaxPool2d(2, 2)             # 56 -> 28
-        self.enc4 = self._encoder_block(c3, c4)     # 28 -> 28, 512ch
-        self.pool4 = nn.MaxPool2d(2, 2)             # 28 -> 14
+        self.enc1 = self._encoder_block(2, c1)  # 224 -> 224, 64ch
+        self.pool1 = nn.MaxPool2d(2, 2)  # 224 -> 112
+        self.enc2 = self._encoder_block(c1, c2)  # 112 -> 112, 128ch
+        self.pool2 = nn.MaxPool2d(2, 2)  # 112 -> 56
+        self.enc3 = self._encoder_block(c2, c3)  # 56 -> 56, 256ch
+        self.pool3 = nn.MaxPool2d(2, 2)  # 56 -> 28
+        self.enc4 = self._encoder_block(c3, c4)  # 28 -> 28, 512ch
+        self.pool4 = nn.MaxPool2d(2, 2)  # 28 -> 14
 
         # Bottleneck
         self.bottleneck = self._encoder_block(c4, c4 * 2)  # 14 -> 14, 1024ch
 
         # Decoder
-        self.up4 = self._decoder_block(c4 * 2, c4)   # 14 -> 28, 512ch
+        self.up4 = self._decoder_block(c4 * 2, c4)  # 14 -> 28, 512ch
         self.dec4 = self._encoder_block(c4 * 2, c4)  # Skip + up = 1024 -> 512
 
-        self.up3 = self._decoder_block(c4, c3)       # 28 -> 56, 256ch
+        self.up3 = self._decoder_block(c4, c3)  # 28 -> 56, 256ch
         self.dec3 = self._encoder_block(c3 * 2, c3)  # Skip + up = 512 -> 256
 
-        self.up2 = self._decoder_block(c3, c2)       # 56 -> 112, 128ch
+        self.up2 = self._decoder_block(c3, c2)  # 56 -> 112, 128ch
         self.dec2 = self._encoder_block(c2 * 2, c2)  # Skip + up = 256 -> 128
 
-        self.up1 = self._decoder_block(c2, c1)       # 112 -> 224, 64ch
+        self.up1 = self._decoder_block(c2, c1)  # 112 -> 224, 64ch
         self.dec1 = self._encoder_block(c1 * 2, c1)  # Skip + up = 128 -> 64
 
         # Final output layer
@@ -121,7 +121,7 @@ class UNetBaseline(nn.Module):
         dirty_2ch = torch.cat([dirty_complex.real, dirty_complex.imag], dim=1)
 
         # Encoder path
-        e1 = self.enc1(dirty_2ch)       # (B, 64, 224, 224)
+        e1 = self.enc1(dirty_2ch)  # (B, 64, 224, 224)
         e2 = self.enc2(self.pool1(e1))  # (B, 128, 112, 112)
         e3 = self.enc3(self.pool2(e2))  # (B, 256, 56, 56)
         e4 = self.enc4(self.pool3(e3))  # (B, 512, 28, 28)
@@ -130,24 +130,24 @@ class UNetBaseline(nn.Module):
         b = self.bottleneck(self.pool4(e4))  # (B, 1024, 14, 14)
 
         # Decoder path with skip connections
-        d4 = self.up4(b)                    # (B, 512, 28, 28)
-        d4 = torch.cat([d4, e4], dim=1)     # (B, 1024, 28, 28)
-        d4 = self.dec4(d4)                  # (B, 512, 28, 28)
+        d4 = self.up4(b)  # (B, 512, 28, 28)
+        d4 = torch.cat([d4, e4], dim=1)  # (B, 1024, 28, 28)
+        d4 = self.dec4(d4)  # (B, 512, 28, 28)
 
-        d3 = self.up3(d4)                   # (B, 256, 56, 56)
-        d3 = torch.cat([d3, e3], dim=1)     # (B, 512, 56, 56)
-        d3 = self.dec3(d3)                  # (B, 256, 56, 56)
+        d3 = self.up3(d4)  # (B, 256, 56, 56)
+        d3 = torch.cat([d3, e3], dim=1)  # (B, 512, 56, 56)
+        d3 = self.dec3(d3)  # (B, 256, 56, 56)
 
-        d2 = self.up2(d3)                   # (B, 128, 112, 112)
-        d2 = torch.cat([d2, e2], dim=1)     # (B, 256, 112, 112)
-        d2 = self.dec2(d2)                  # (B, 128, 112, 112)
+        d2 = self.up2(d3)  # (B, 128, 112, 112)
+        d2 = torch.cat([d2, e2], dim=1)  # (B, 256, 112, 112)
+        d2 = self.dec2(d2)  # (B, 128, 112, 112)
 
-        d1 = self.up1(d2)                   # (B, 64, 224, 224)
-        d1 = torch.cat([d1, e1], dim=1)     # (B, 128, 224, 224)
-        d1 = self.dec1(d1)                  # (B, 64, 224, 224)
+        d1 = self.up1(d2)  # (B, 64, 224, 224)
+        d1 = torch.cat([d1, e1], dim=1)  # (B, 128, 224, 224)
+        d1 = self.dec1(d1)  # (B, 64, 224, 224)
 
         # Final output
-        output = self.final(d1)             # (B, 2, 224, 224)
+        output = self.final(d1)  # (B, 2, 224, 224)
 
         # Apply residual connection if enabled
         clean_2ch = dirty_2ch + output if self.residual_mode else output

@@ -66,14 +66,9 @@ def main() -> None:  # noqa: C901, PLR0915, PLR0912
     print(f"Using device: {device}")
 
     # Initialize Model - Using Direct Connection for Experiment 10
-    model = HoloPASWIN(
-        IMG_SIZE,
-        WAVELENGTH,
-        PIXEL_SIZE,
-        Z_DIST,
-        use_pretrained=True,
-        residual_mode=RESIDUAL_MODE
-    ).to(device)
+    model = HoloPASWIN(IMG_SIZE, WAVELENGTH, PIXEL_SIZE, Z_DIST, use_pretrained=True, residual_mode=RESIDUAL_MODE).to(
+        device
+    )
 
     # Physics Loss Wrapper
     # We share the propagator from the model to ensure parameters match

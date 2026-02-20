@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-import pandas as pd
+import pandas as pd  # type: ignore[import-untyped]
 import torch
 from torch import nn
 from torch.utils.data import DataLoader
@@ -57,7 +57,7 @@ class BaselineEvaluator:
         dataloader: DataLoader,  # type: ignore[type-arg]
         model_name: str,
         max_samples: int | None = None,
-    ) -> dict[str, float]:
+    ) -> dict[str, Any]:
         """Evaluate a single model on the test dataset.
 
         Args:
@@ -138,7 +138,7 @@ class BaselineEvaluator:
         self,
         per_sample: list[dict[str, Any]],
         inference_times: list[float],
-    ) -> dict[str, float]:
+    ) -> dict[str, Any]:
         """Aggregate per-sample metrics to mean values."""
         if not per_sample:
             return {}
@@ -146,7 +146,7 @@ class BaselineEvaluator:
         # Extract metric names (exclude non-numeric fields)
         metric_names = [k for k in per_sample[0] if k not in ("sample_idx", "inference_time_ms")]
 
-        aggregated: dict[str, float] = {}
+        aggregated: dict[str, Any] = {}
         for name in metric_names:
             values = [m[name] for m in per_sample]
             aggregated[f"{name}_mean"] = float(np.mean(values))

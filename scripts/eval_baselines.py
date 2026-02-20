@@ -21,6 +21,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from holopaswin.baselines.gerchberg_saxton import GerchbergSaxton
+from holopaswin.baselines.hrnet import HRNet
 from holopaswin.baselines.unet_baseline import UNetBaseline
 from holopaswin.dataset import HoloDataset
 from holopaswin.evaluation.evaluator import BaselineEvaluator
@@ -56,7 +57,7 @@ def count_parameters(model: torch.nn.Module) -> int:
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 
-def main() -> None:  # noqa: PLR0915
+def main() -> None:  # noqa: PLR0915, PLR0912
     """Run baseline comparison evaluation."""
     parser = argparse.ArgumentParser(description="Evaluate baseline methods")
     parser.add_argument(
@@ -88,6 +89,12 @@ def main() -> None:  # noqa: PLR0915
         type=str,
         default=None,
         help="Path to ResNet-U-Net checkpoint (optional, will skip if not provided)",
+    )
+    parser.add_argument(
+        "--hrnet-ckpt",
+        type=str,
+        default=None,
+        help="Path to HRNet checkpoint (optional, will skip if not provided)",
     )
     parser.add_argument(
         "--gs-iterations",
@@ -179,6 +186,19 @@ def main() -> None:  # noqa: PLR0915
         all_results.append(resnet_results)
     else:
         print(f"\nSkipping ResNet-U-Net (checkpoint not found: {args.resnet_unet_ckpt})")
+
+    # 4.5. HRNet
+    if args.hrnet_ckpt and Path(args.hrnet_ckpt).exists():
+        print("\n" + "=" * 60)
+        print("Evaluating: HRNet")
+        print("=" * 60)
+        hrnet_model = HRNet(IMG_SIZE, WAVELENGTH, PIXEL_SIZE, Z_DIST, residual_mode=True)
+        hrnet_model.load_state_dict(torch.load(args.hrnet_ckpt, map_location=device, weights_only=True))
+        hrnet_results = evaluator.evaluate_model(hrnet_model, test_loader, "HRNet", args.max_samples)
+        hrnet_results["num_parameters"] = count_parameters(hrnet_model)
+        all_results.append(hrnet_results)
+    else:
+        print(f"\nSkipping HRNet (checkpoint not found: {args.hrnet_ckpt})")
 
     # 5. HoloPASWIN (ours)
     if Path(args.holopaswin_ckpt).exists():

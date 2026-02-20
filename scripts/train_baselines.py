@@ -18,6 +18,7 @@ import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
+from holopaswin.baselines.hrnet import HRNet
 from holopaswin.baselines.unet_baseline import UNetBaseline
 from holopaswin.dataset import HoloDataset
 from holopaswin.loss import PhysicsLoss
@@ -47,6 +48,14 @@ def get_model(model_name: str) -> torch.nn.Module:
         )
     if model_name == "resnet_unet":
         return ResNetUNet(
+            img_size=IMG_SIZE,
+            wavelength=WAVELENGTH,
+            pixel_size=PIXEL_SIZE,
+            z_distance=Z_DIST,
+            residual_mode=True,
+        )
+    if model_name == "hrnet":
+        return HRNet(
             img_size=IMG_SIZE,
             wavelength=WAVELENGTH,
             pixel_size=PIXEL_SIZE,
@@ -165,9 +174,9 @@ def main() -> None:
     parser.add_argument(
         "--model",
         type=str,
-        choices=["unet", "resnet_unet"],
+        choices=["unet", "resnet_unet", "hrnet"],
         required=True,
-        help="Model to train: 'unet' or 'resnet_unet'",
+        help="Model to train: 'unet', 'resnet_unet', or 'hrnet'",
     )
     parser.add_argument(
         "--epochs",

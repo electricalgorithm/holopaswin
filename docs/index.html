@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <meta name="description"
+        content="HoloPASWIN: Robust Inline Holographic Reconstruction via Physics-Aware Swin Transformers">
+    <meta name="keywords" content="Holography, Swin Transformer, Phase Retrieval, Twin-Image Elimination">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>HoloPASWIN: Robust Inline Holographic Reconstruction via Physics-Aware Swin Transformers</title>
+
+    <link href="https://fonts.googleapis.com/css?family=Google+Sans|Noto+Sans|Castoro" rel="stylesheet">
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma-carousel@4.0.3/dist/css/bulma-carousel.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma-slider@2.0.0/dist/css/bulma-slider.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/jpswalsh/academicons@1/css/academicons.min.css">
+    <link rel="stylesheet" href="./style.css">
+
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bulma-carousel@4.0.3/dist/js/bulma-carousel.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bulma-slider@2.0.0/dist/js/bulma-slider.min.js"></script>
+
+    <script>
+        $(document).ready(function () {
+            // Carousel and slider removed per user request for simplicity
+        });
+    </script>
+</head>
+
+<body>
+
+    <section class="hero">
+        <div class="hero-body">
+            <div class="container is-max-widescreen">
+                <div class="columns is-centered">
+                    <div class="column has-text-centered">
+                        <h1 class="subtitle is-3 publication-title">
+                            <b>HoloPASWIN:</b> <br>
+                            Robust Inline Holographic Reconstruction <br>
+                            via Physics-Aware Swin Transformers
+                        </h1>
+                        <div class="is-size-5 publication-authors">
+                            <span class="author-block">
+                                Gökhan Koçmarlı<sup>1*</sup>,
+                            </span>
+                            <span class="author-block">
+                                G. Bora Esmer<sup>2</sup>
+                            </span>
+                        </div>
+
+                        <br>
+
+                        <div class="is-size-5 publication-authors">
+                            <span class="author-block"><sup>1</sup>Independent Researcher,
+                                Germany</span>&nbsp;&nbsp;&nbsp; <br>
+                            <span class="author-block"><sup>2</sup>Control and Automation Engineering Department, Yildiz
+                                Technical University, Türkiye</span>
+                        </div>
+
+                        <br>
+
+                        <div class="is-size-5 thanks">
+                            <span class="author-block">Corresponding author(s):</span>
+                            <span class="author-block"><a
+                                    href="mailto:research@gyokhan.com">research@gyokhan.com</a>,</span>
+                            <span class="author-block"><a
+                                    href="mailto:bora.esmer@yildiz.edu.tr">bora.esmer@yildiz.edu.tr</a></span>
+                        </div>
+
+                        <div class="column has-text-centered">
+                            <div class="publication-links">
+                                <!-- Code Link. -->
+                                <span class="link-block">
+                                    <a href="https://github.com/electricalgorithm/holopaswin" target="_blank"
+                                        class="external-link button is-normal is-rounded is-dark">
+                                        <span class="icon">
+                                            <i class="fab fa-github"></i>
+                                        </span>
+                                        <span>Code</span>
+                                    </a>
+                                </span>
+                                <!-- Model Link. -->
+                                <span class="link-block">
+                                    <a href="https://huggingface.co/gokhankocmarli/holopaswin-v2" target="_blank"
+                                        class="external-link button is-normal is-rounded is-dark">
+                                        <span class="icon">
+                                            🤗
+                                        </span>
+                                        <span>Model</span>
+                                    </a>
+                                </span>
+                                <!-- Dataset Link. -->
+                                <span class="link-block">
+                                    <a href="https://huggingface.co/datasets/gokhankocmarli/inline-digital-holography-v3"
+                                        target="_blank" class="external-link button is-normal is-rounded is-dark">
+                                        <span class="icon">
+                                            <i class="fas fa-database"></i>
+                                        </span>
+                                        <span>Dataset</span>
+                                    </a>
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="hero teaser">
+        <div class="container is-max-desktop">
+            <div class="content has-text-centered">
+                <img src="images/architecture.png" alt="HoloPASWIN Network Architecture" width="100%" />
+                <p class="is-size-6 mt-3">
+                    <b>HoloPASWIN Network Architecture.</b> The framework utilizes a Swin Transformer backbone within a
+                    U-Net structure. It processes the complex field obtained via ASM and predicts a 2-channel residual
+                    correction to eliminate twin-image artifacts and recover the clean complex field.
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <section class="section hero is-light">
+        <div class="container is-max-desktop">
+            <!-- Abstract -->
+            <div class="columns is-centered has-text-centered">
+                <div class="column is-four-fifths">
+                    <!-- <h2 class="title is-3">Abstract</h2> -->
+                    <div class="content has-text-justified">
+                        <p>
+                            In-line digital holography (DIH) is a widely used lensless imaging technique, valued for its
+                            simplicity and capability to image samples at high throughput. However, capturing only
+                            intensity of the interference pattern during the recording process gives rise to some
+                            unwanted terms such as cross-term and twin-image. The cross-term can be suppressed by
+                            adjusting the intensity of the reference wave, but the twin-image problem remains. The
+                            twin-image is a spectral artifact that superimposes a defocused conjugate wave onto the
+                            reconstructed object, severely degrading image quality.
+                        </p>
+                        <p>
+                            While deep learning has recently emerged as a powerful tool for phase retrieval, traditional
+                            Convolutional Neural Networks (CNNs) are limited by their local receptive fields, making
+                            them less effective at capturing the global diffraction patterns inherent in holography. In
+                            this study, we introduce <b>HoloPASWIN</b>, a physics-aware deep learning framework based on
+                            the Swin Transformer architecture. By leveraging hierarchical shifted-window attention, our
+                            model efficiently captures both local details and long-range dependencies essential for
+                            accurate holographic reconstruction.
+                        </p>
+                        <p>
+                            We propose a comprehensive loss function that integrates frequency-domain constraints with
+                            physical consistency via a differentiable angular spectrum propagator, ensuring high
+                            spectral fidelity. Validated on a large-scale synthetic dataset of 25,000 samples with
+                            diverse noise configurations, HoloPASWIN demonstrates effective twin-image suppression and
+                            robust reconstruction quality.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="section">
+        <div class="container is-max-desktop">
+            <div class="columns is-centered has-text-centered">
+                <div class="column is-four-fifths">
+                    <h2 class="title is-3">Network Architecture Details</h2>
+                    <div class="content has-text-justified">
+                        <p>
+                            HoloPASWIN implements a U-shaped encoder-decoder architecture but replaces standard
+                            convolutional layers with Swin Transformer blocks to capture long-range diffraction
+                            dependencies.
+                        </p>
+                        <ul>
+                            <li><strong>Input Processing</strong>: Accepts an intensity hologram and utilizes ASM to
+                                obtain a 2-channel tensor (real/imaginary) of the "dirty" reconstruction.</li>
+                            <li><strong>Encoder</strong>: A Swin-Tiny backbone pretrained on ImageNet produces
+                                hierarchical features at four scales (1/4 to 1/32 resolution) using a window size of
+                                7×7.</li>
+                            <li><strong>Decoder</strong>: Progressively upsamples features utilizing transposed
+                                convolutions with additive skip connections, fusing encoder features to preserve
+                                gradient flow and multi-scale details.</li>
+                            <li><strong>Output Head (Residual Learning)</strong>: The final layer predicts a 2-channel
+                                residual correction term added to the dirty input field, focusing exclusively on
+                                artifact removal rather than full field synthesis.</li>
+                        </ul>
+                    </div>
+
+                    <h2 class="title is-3 mt-6">Physical Consistency and Loss</h2>
+                    <div class="content has-text-justified">
+                        <p>
+                            We constrain the network across spatial, frequency, and physical measurement domains. The
+                            total loss combines a supervised L1 loss on amplitude, phase, and the complex field,
+                            together with a critical <b>frequency loss</b> ($\mathcal{L}_{freq}$) that prevents the
+                            smoothing of high-frequency details.
+                        </p>
+                        <p>
+                            Additionally, an unsupervised <b>physics loss</b> ($\mathcal{L}_{phy}$) enforces forward
+                            imaging consistency. It propagates the predicted object field forward using a differentiable
+                            ASM layer and minimizes its distance against the original intensity hologram, mathematically
+                            penalizing any physically unnatural twin-image remnants.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="section">
+        <div class="container is-max-desktop">
+            <div class="columns is-centered has-text-centered">
+                <div class="column is-four-fifths">
+                    <h2 class="title is-3">Reconstruction Results</h2>
+                    <div class="content has-text-justified">
+                        <p>
+                            Quantitative evaluations underscore the superiority of our framework on a demanding
+                            synthetic dataset. HoloPASWIN achieves an exceptional <b>Phase SSIM of 0.974</b> and a
+                            <b>Phase PSNR of 44.3 dB</b>, showcasing robust phase recovery crucial for QPI applications.
+                        </p>
+                    </div>
+                    <img src="images/comparison.png"
+                        alt="Qualitative comparison showing Input Hologram, GT Amplitude, Predicted, GT Phase, and Predicted Phase."
+                        width="100%">
+                    <p class="is-size-7 has-text-centered mt-2">
+                        <b>Qualitative comparison of reconstruction results.</b> Rows correspond to different test
+                        samples. From left to right: Input Hologram, GT Amplitude, Predicted Amplitude, GT Phase,
+                        Predicted Phase. The model effectively removes twin-images and background noise while preserving
+                        object sharpness.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="section">
+        <div class="container is-max-desktop">
+            <h2 class="title is-3 has-text-centered">Detailed Error Analysis & Robustness</h2>
+            <div class="columns is-centered mt-5">
+                <div class="column is-6">
+                    <div class="content has-text-justified is-size-6">
+                        <p>
+                            <b>Detailed Error Analysis.</b> Close-up regions emphasize the model's preservation
+                            of fine structural details and the corresponding low magnitudes in the error maps.
+                            Differences are mostly confined to high-frequency edges.
+                        </p>
+                    </div>
+                    <img src="images/detailed_comparison.png" width="100%" style="margin: 0 auto; display: block;">
+                </div>
+                <div class="column is-6">
+                    <div class="content has-text-justified is-size-6">
+                        <p>
+                            <b>Distance Robustness.</b> The model is exceptionally accurate when tested at the
+                            training calibration distance (z=20 mm), highlighting the highly geometry-specific
+                            nature of deep phase retrieval mappings. Performance degrades with mismatches $\ge 0.5$ mm.
+                        </p>
+                    </div>
+                    <img src="images/z_mismatch_plot.png" width="85%" style="margin: 0 auto; display: block;">
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="section" id="BibTeX">
+        <div class="container is-max-desktop content">
+            <h2 class="title">BibTeX</h2>
+            The article is not published yet, stay tuned!
+        </div>
+    </section>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="content has-text-centered">
+                <a class="icon-link" href="https://github.com/electricalgorithm/holopaswin" target="_blank">
+                    <i class="fab fa-github"></i>
+                </a>
+            </div>
+            <div class="columns is-centered">
+                <div class="column is-8">
+                    <div class="content text-is-centered">
+                        <p class="has-text-centered">
+                            Licensed under a Creative Commons
+                            Attribution-ShareAlike 4.0 International License.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+</body>
+
+</html>

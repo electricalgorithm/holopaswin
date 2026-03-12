@@ -25,9 +25,8 @@ This repository implements a Physics-Aware Swin Transformer U-Net that inherentl
 
 <img src="./docs/images/architecture.png" width="800">
 
-HoloPASWIN effectively processes continuous global diffraction patterns through hierarchical shifted-window attention. It utilizes both frequency-domain constraints and a novel unsupervised physics-based residual loss to guarantee physically consistent reconstructions.
+HoloPASWIN utilizes a U-shaped architecture based on Swin Transformer blocks. The model first processes an input intensity hologram using the backward Angular Spectrum Method (ASM) to obtain an initial, artifact-heavy complex field. A 4-stage Swin Encoder-Decoder network then extracts multi-scale features to predict a residual correction. By adding this correction to the initial field and training with both frequency-domain constraints and a physics-based forward propagation loss, the network robustly recovers the clean phase and amplitude.
 
----
 
 ## Installation & Usage
 
@@ -61,9 +60,7 @@ This repository includes pre-commit hooks that automatically run code quality ch
 
 If any check fails, the commit will be blocked. You can bypass the hook with `git commit --no-verify` (not recommended).
 
----
-
-## 📖 Citation
+## Citation
 
 If you find this code, dataset, or model useful for your research, please cite our paper:
 

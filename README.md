@@ -58,14 +58,14 @@ This repository includes pre-commit hooks that automatically run code quality ch
 ./scripts/install-hooks.sh
 ```
 
-If any check fails, the commit will be blocked. You can bypass the hook with `git commit --no-verify` (not recommended).
+If any check fails, the commit will be blocked.
 
 ## Citation
 
 If you find this code, dataset, or model useful for your research, please cite our paper:
 
 ```bibtex
-@misc{koçmarlı2026holopaswinrobustinlineholographic,
+@misc{kocmarli2026holopaswinrobustinlineholographic,
       title={HoloPASWIN: Robust Inline Holographic Reconstruction via Physics-Aware Swin Transformers}, 
       author={Gökhan Koçmarlı and G. Bora Esmer},
       year={2026},

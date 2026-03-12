@@ -14,15 +14,14 @@
 *HoloPASWIN recovers clean phase and amplitude mappings from a single intensity hologram, directly eliminating twin-image artifacts.*
 </div>
 
-## 📌 At a Glance (The 5-Second Summary)
+## Overview
 
-- **Problem:** Inline digital holography is highly effective but suffers from the **twin-image artifact**, which overlays an out-of-focus duplicate on the reconstructed image.
-- **Solution:** **HoloPASWIN** brings the Swin Transformer's global attention to holographic imaging, operating inside a U-Net architecture. By leveraging forward physics models (Angular Spectrum Method), it learns to inherently correct and remove these twin-images.
-- **Result:** State-of-the-art phase recovery and high structural fidelity, remaining highly robust across varying noise and distance configurations.
+HoloPASWIN is a deep learning framework designed to eliminate the twin-image artifact in inline digital holography. While inline holography is an effective lensless imaging technique, the loss of phase information during capturing causes an out-of-focus duplicate (twin-image) to permanently degrade the reconstructed object.
 
----
+This repository implements a Physics-Aware Swin Transformer U-Net that inherently corrects and removes these artifacts. By integrating a forward physics model (the Angular Spectrum Method) with the Swin Transformer's global attention, HoloPASWIN achieves robust phase recovery and high structural fidelity across varying noise levels and distances.
 
-## 🏗 Network Architecture
+
+## Network Architecture
 
 <img src="./docs/images/architecture.png" width="800">
 
@@ -30,7 +29,7 @@ HoloPASWIN effectively processes continuous global diffraction patterns through 
 
 ---
 
-## 💻 Installation & Usage
+## Installation & Usage
 
 This project uses [uv](https://github.com/astral-sh/uv) for fast and reliable dependency management.
 

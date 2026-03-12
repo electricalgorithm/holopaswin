@@ -17,6 +17,8 @@
 
 ## Overview
 
+> **🤗 Try the interactive Web Demo on Hugging Face Spaces:** [gokhankocmarli/holopaswin-v3-space](https://huggingface.co/spaces/gokhankocmarli/holopaswin-v3-space)
+
 HoloPASWIN is a deep learning framework designed to eliminate the twin-image artifact in inline digital holography. While inline holography is an effective lensless imaging technique, the loss of phase information during capturing causes an out-of-focus duplicate (twin-image) to permanently degrade the reconstructed object.
 
 This repository implements a Physics-Aware Swin Transformer U-Net that inherently corrects and removes these artifacts. By integrating a forward physics model (the Angular Spectrum Method) with the Swin Transformer's global attention, HoloPASWIN achieves robust phase recovery and high structural fidelity across varying noise levels and distances.
@@ -46,12 +48,6 @@ This project uses [uv](https://github.com/astral-sh/uv) for fast and reliable de
     This creates a virtual environment and installs all locked dependencies from `uv.lock`.
 
 ## Usage
-
-### Web Demo (Hugging Face Space)
-
-You can try out HoloPASWIN interactively via our **[Hugging Face Space](https://huggingface.co/spaces/gokhankocmarli/holopaswin-v3-space)**. Upload your own holograms and instantly visualize the predicted phase and amplitude!
-
----
 
 ### Training
 

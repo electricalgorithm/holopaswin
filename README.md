@@ -7,6 +7,7 @@
 [![Paper](https://img.shields.io/badge/arXiv-2603.04926-b31b1b.svg)](https://arxiv.org/abs/2603.04926)
 [![Model](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Models-FFD21E)](https://huggingface.co/gokhankocmarli/holopaswin-v3)
 [![Dataset](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Dataset-FFD21E)](https://huggingface.co/datasets/gokhankocmarli/inline-digital-holography-v3)
+[![Demo Space](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue)](https://huggingface.co/spaces/gokhankocmarli/holopaswin-v3-space)
 [![Website](https://img.shields.io/badge/Project-Website-blue)](https://electricalgorithm.github.io/holopaswin/)
 
 <img src="./docs/images/comparison.png" width="800">
@@ -45,6 +46,12 @@ This project uses [uv](https://github.com/astral-sh/uv) for fast and reliable de
     This creates a virtual environment and installs all locked dependencies from `uv.lock`.
 
 ## Usage
+
+### Web Demo (Hugging Face Space)
+
+You can try out HoloPASWIN interactively via our **[Hugging Face Space](https://huggingface.co/spaces/gokhankocmarli/holopaswin-v3-space)**. Upload your own holograms and instantly visualize the predicted phase and amplitude!
+
+---
 
 ### Training
 

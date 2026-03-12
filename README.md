@@ -28,7 +28,7 @@ This repository implements a Physics-Aware Swin Transformer U-Net that inherentl
 HoloPASWIN utilizes a U-shaped architecture based on Swin Transformer blocks. The model first processes an input intensity hologram using the backward Angular Spectrum Method (ASM) to obtain an initial, artifact-heavy complex field. A 4-stage Swin Encoder-Decoder network then extracts multi-scale features to predict a residual correction. By adding this correction to the initial field and training with both frequency-domain constraints and a physics-based forward propagation loss, the network robustly recovers the clean phase and amplitude.
 
 
-## Installation & Usage
+## Installation
 
 This project uses [uv](https://github.com/astral-sh/uv) for fast and reliable dependency management.
 
@@ -44,11 +44,29 @@ This project uses [uv](https://github.com/astral-sh/uv) for fast and reliable de
     ```
     This creates a virtual environment and installs all locked dependencies from `uv.lock`.
 
-3.  **Training**:
-    To start training the model, run:
-    ```bash
-    uv run src/train.py
-    ```
+## Usage
+
+### Training
+
+To train the model from scratch on the dataset, run:
+
+```bash
+uv run src/train.py
+```
+
+### Inference & Testing
+
+To evaluate a trained model and generate visualization results on test samples, run:
+
+```bash
+uv run src/inference.py
+```
+
+To calculate full quantitative metrics (SSIM, PSNR, MSE) over the test dataset, run:
+
+```bash
+uv run src/test.py
+```
 
 ### Development
 

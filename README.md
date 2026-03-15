@@ -7,7 +7,7 @@
 [![Paper](https://img.shields.io/badge/arXiv-2603.04926-b31b1b.svg)](https://arxiv.org/abs/2603.04926)
 [![Model](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Models-FFD21E)](https://huggingface.co/gokhankocmarli/holopaswin-v3)
 [![Dataset](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Dataset-FFD21E)](https://huggingface.co/datasets/gokhankocmarli/inline-digital-holography-v3)
-[![Demo Space](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue)](https://huggingface.co/spaces/gokhankocmarli/holopaswin-v3-space)
+[![Demo Space](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue)](https://huggingface.co/spaces/gokhankocmarli/holopaswin-v3)
 [![Website](https://img.shields.io/badge/Project-Website-blue)](https://electricalgorithm.github.io/holopaswin/)
 
 <img src="./docs/images/comparison.png" width="800">
@@ -17,7 +17,7 @@
 
 ## Overview
 
-> **🤗 Try the interactive Web Demo on Hugging Face Spaces:** [gokhankocmarli/holopaswin-v3-space](https://huggingface.co/spaces/gokhankocmarli/holopaswin-v3-space)
+> **🤗 Try the interactive Web Demo on Hugging Face Spaces:** [gokhankocmarli/holopaswin-v3-space](https://huggingface.co/spaces/gokhankocmarli/holopaswin-v3)
 
 HoloPASWIN is a deep learning framework designed to eliminate the twin-image artifact in inline digital holography. While inline holography is an effective lensless imaging technique, the loss of phase information during capturing causes an out-of-focus duplicate (twin-image) to permanently degrade the reconstructed object.
 

@@ -89,7 +89,7 @@ def visualize_inference(model_path: str, data_dir: str, num_samples: int = 3) ->
             holo_t, gt_obj_t = dataset[idx]  # holo: (1,H,W), gt: (2,H,W) [real, imag]
 
             # Prepare Batch
-            # Dataset already normalizes by 1000.0
+            # The dataset already normalises the hologram to a background of 1
             holo_in = holo_t.unsqueeze(0).to(device)  # (1,1,H,W)
 
             # Inference

@@ -12,6 +12,8 @@ import torch
 from torch.utils.data import Dataset
 from torchvision import transforms
 
+from holopaswin.normalization import normalize_hologram
+
 
 class HoloDataset(Dataset[tuple[torch.Tensor, torch.Tensor]]):
     """PyTorch Dataset for loading holographic data from Parquet files.
@@ -125,11 +127,9 @@ class HoloDataset(Dataset[tuple[torch.Tensor, torch.Tensor]]):
         r_np = g_slice["real"].to_numpy().reshape(self.img_dim, self.img_dim).astype(np.float32)
         i_np = g_slice["imag"].to_numpy().reshape(self.img_dim, self.img_dim).astype(np.float32)
 
-        # Convert to Tensor
-        # NORMALIZE: Raw 12-bit intensity is around 1000.
-        # We value consistency with the physics model where |Object|=1 => Intensity=1.
-        # So we scale the input by 1000.0 to bring it to ~1.0 range.
-        holo_np = h_np / 1000.0
+        # Convert the camera's digital numbers to intensity relative to the
+        # illumination (background = 1), as used by the physics model and L_phy.
+        holo_np = normalize_hologram(h_np)
         holo = torch.from_numpy(holo_np).unsqueeze(0)
 
         # Object: (2, H, W) -> [Real, Imag]

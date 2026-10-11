@@ -102,6 +102,24 @@ def test_normalised_recording_matches_the_asm_intensity_scale() -> None:
     assert np.mean(np.abs(normalised - hologram)) < 0.02
 
 
+@pytest.mark.parametrize("seed", range(5))
+def test_background_bias_follows_power_conservation(seed: int) -> None:
+    """The remaining background offset is the one predicted by power conservation.
+
+    Propagation conserves power, so the recorded mean is B * T + d electrons, with
+    T = mean |O|^2 = mean |ASM(O)|^2 and d the dark electrons, while a background
+    pixel records B + d. Dividing by the mean therefore leaves the background at
+    (B + d) / (B * T + d), slightly above 1 for an absorbing sample.
+    """
+    hologram, _ = ideal_hologram()
+    predicted = (BACKGROUND_ELECTRONS + DARK_ELECTRONS) / (BACKGROUND_ELECTRONS * hologram.mean() + DARK_ELECTRONS)
+    normalised = normalize_hologram(record(hologram, seed))
+    background = np.abs(hologram - 1.0) < 0.01
+
+    assert predicted > 1.0
+    assert np.mean(normalised[background]) == pytest.approx(predicted, abs=0.0007)
+
+
 def test_fixed_divisor_breaks_the_asm_scale() -> None:
     """Regression test: the former fixed division by 1000 breaks the ASM scale.
 

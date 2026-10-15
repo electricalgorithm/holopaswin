@@ -25,6 +25,10 @@ IMG_SIZE = 224
 WAVELENGTH = 532e-9
 PIXEL_SIZE = 4.65e-6
 Z_DIST = 0.02
+# Objective NA for the physics loss. None matches the lensless geometry above;
+# dataset 2.0 (magnified IMX183 setup) needs 0.45 together with a 0.24 um
+# object-plane pixel and a 20 um distance.
+NUMERICAL_APERTURE: float | None = None
 RESIDUAL_MODE = True  # Residual mode for Experiment 12
 
 # Training Configuration
@@ -66,9 +70,15 @@ def main() -> None:  # noqa: C901, PLR0915, PLR0912
     print(f"Using device: {device}")
 
     # Initialize Model - Using Direct Connection for Experiment 10
-    model = HoloPASWIN(IMG_SIZE, WAVELENGTH, PIXEL_SIZE, Z_DIST, use_pretrained=True, residual_mode=RESIDUAL_MODE).to(
-        device
-    )
+    model = HoloPASWIN(
+        IMG_SIZE,
+        WAVELENGTH,
+        PIXEL_SIZE,
+        Z_DIST,
+        use_pretrained=True,
+        residual_mode=RESIDUAL_MODE,
+        numerical_aperture=NUMERICAL_APERTURE,
+    ).to(device)
 
     # Physics Loss Wrapper
     # We share the propagator from the model to ensure parameters match

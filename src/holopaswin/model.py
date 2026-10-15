@@ -36,6 +36,7 @@ class HoloPASWIN(torch.nn.Module):
         z_dist: float,
         use_pretrained: bool = True,
         residual_mode: bool = True,
+        numerical_aperture: float | None = None,
     ) -> None:
         """Initialize the HoloPASWIN model.
 
@@ -46,10 +47,15 @@ class HoloPASWIN(torch.nn.Module):
             z_dist: Propagation distance in meters (e.g., 0.02).
             use_pretrained: Whether to use ImageNet pretrained weights for Swin Transformer.
             residual_mode: If True, predict correction; if False, predict clean field directly.
+            numerical_aperture: NA of the imaging objective for a magnified setup (e.g.,
+                0.45), applied in forward propagation by the physics loss. None for a
+                lensless setup.
         """
         super().__init__()
         self.residual_mode = residual_mode
-        self.propagator = AngularSpectrumPropagator((img_size, img_size), wavelength, pixel_size, z_dist)
+        self.propagator = AngularSpectrumPropagator(
+            (img_size, img_size), wavelength, pixel_size, z_dist, numerical_aperture=numerical_aperture
+        )
 
         # Input to Swin is the Real and Imag parts of the back-propagated field (2 channels)
         # Output is Clean Real and Imag parts (2 channels)

@@ -3,7 +3,16 @@
 This module provides a differentiable implementation of the Angular Spectrum Method
 for wave propagation, which can be used as a layer in neural networks or as part
 of loss functions. The propagator can perform both forward and backward propagation.
+
+In a magnified setup the microscope objective only collects light up to its
+numerical aperture (NA). Its coherent transfer function is a circular pupil that
+passes spatial frequencies up to NA / wavelength (Goodman, Introduction to Fourier
+Optics, Sec. 6.2). Forward propagation applies that pupil, so a predicted object
+is compared with what the camera can actually record. This mirrors the hologen
+simulator, which applies the pupil on the way to the sensor only.
 """
+
+from typing import ClassVar
 
 import numpy as np
 import torch
@@ -20,8 +29,13 @@ class AngularSpectrumPropagator(nn.Module):
     The propagator precomputes the transfer function for efficiency during training.
     It supports both forward propagation (in the +z direction) and backward
     propagation (in the -z direction) by using the complex conjugate of the
-    transfer function.
+    transfer function. With a numerical aperture, forward propagation also passes
+    the field through the objective pupil.
     """
+
+    # Largest numerical aperture of a real objective, an oil immersion objective
+    # (n = 1.52). Larger values point to a unit or typing mistake.
+    MAX_NUMERICAL_APERTURE: ClassVar[float] = 1.5
 
     def __init__(
         self,
@@ -29,23 +43,38 @@ class AngularSpectrumPropagator(nn.Module):
         wavelength: float,
         pixel_size: float,
         z_distance: float,
+        numerical_aperture: float | None = None,
     ) -> None:
         """Initialize the Angular Spectrum Propagator.
 
         Args:
-            shape: Tuple of (height, width) for the input field.
-            wavelength: Wavelength of the light in meters (e.g., 532e-9).
-            pixel_size: Physical size of each pixel in meters (e.g., 4.65e-6).
-            z_distance: Propagation distance in meters (e.g., 0.02).
+            shape (tuple[int, int]): Height and width of the input field.
+            wavelength (float): Wavelength of the light in meters (e.g., 532e-9).
+            pixel_size (float): Pixel size in the object plane in meters (e.g.,
+                0.24e-6 for 2.4 um sensor pixels behind a 10x objective).
+            z_distance (float): Propagation distance in meters (e.g., 20e-6).
+            numerical_aperture (float | None): NA of the imaging objective of a
+                magnified setup, or None for a lensless setup without a pupil.
+
+        Raises:
+            ValueError: If the numerical aperture is outside (0, 1.5].
         """
         super().__init__()
+        if numerical_aperture is not None and not 0 < numerical_aperture <= self.MAX_NUMERICAL_APERTURE:
+            msg: str = f"numerical_aperture must be in (0, {self.MAX_NUMERICAL_APERTURE}], got {numerical_aperture}."
+            raise ValueError(msg)
+
         self.shape = shape
         self.wavelength = wavelength
         self.pixel_size = pixel_size
         self.z_distance = z_distance
+        self.numerical_aperture = numerical_aperture
 
         # Precompute transfer function H to save time during training
         self.H = self._precompute_transfer_function()
+        self.pupil: torch.Tensor | None = (
+            None if numerical_aperture is None else self._precompute_pupil(numerical_aperture)
+        )
 
     def _precompute_transfer_function(self) -> torch.Tensor:
         """Precompute the transfer function for wave propagation.
@@ -84,6 +113,24 @@ class AngularSpectrumPropagator(nn.Module):
         h = torch.exp(1j * phase)
         return h
 
+    def _precompute_pupil(self, numerical_aperture: float) -> torch.Tensor:
+        """Precompute the coherent transfer function of the objective.
+
+        Args:
+            numerical_aperture (float): NA of the objective.
+
+        Returns:
+            torch.Tensor: 1 inside the circle of spatial frequencies up to
+                NA / wavelength and 0 outside, shape (M, N), on the same
+                unshifted frequency grid as the transfer function.
+        """
+        m, n = self.shape
+        fx: torch.Tensor = torch.fft.fftfreq(m, d=self.pixel_size)
+        fy: torch.Tensor = torch.fft.fftfreq(n, d=self.pixel_size)
+        g_fx, g_fy = torch.meshgrid(fx, fy, indexing="ij")
+        cutoff: float = numerical_aperture / self.wavelength
+        return (g_fx**2 + g_fy**2 <= cutoff**2).to(torch.float32)
+
     def forward(self, complex_field: torch.Tensor, backward: bool = False) -> torch.Tensor:
         """Propagate a complex wave field using the Angular Spectrum Method.
 
@@ -91,7 +138,8 @@ class AngularSpectrumPropagator(nn.Module):
             complex_field: Input complex field tensor of shape (B, C, H, W) or (H, W).
                          Represents the complex amplitude of the wave field.
             backward: If True, performs backward propagation (conjugate of transfer function).
-                     If False, performs forward propagation. Defaults to False.
+                     If False, performs forward propagation, through the objective pupil
+                     when a numerical aperture is set. Defaults to False.
 
         Returns:
             Propagated complex field tensor of the same shape as input.
@@ -101,6 +149,8 @@ class AngularSpectrumPropagator(nn.Module):
 
         if backward:
             h = torch.conj(h)
+        elif self.pupil is not None:
+            h = h * self.pupil.to(complex_field.device)
 
         # FFT
         u_f = torch.fft.fft2(complex_field)

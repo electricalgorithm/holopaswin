@@ -83,9 +83,17 @@ class AngularSpectrumPropagator(nn.Module):
         the propagation kernel. This is precomputed once during initialization
         for efficiency during training.
 
-        The transfer function is: H = exp(i * k * z * sqrt(1 - (lambda * f)^2))
+        The transfer function is H = exp(i * k * z * sqrt(1 - (lambda * f)^2)),
         where k = 2*pi/lambda is the wavenumber, z is the propagation distance,
         lambda is the wavelength, and f is the spatial frequency.
+
+        Beyond f = 1 / lambda the plane waves are evanescent. They decay instead
+        of travelling (Goodman, Introduction to Fourier Optics, Sec. 3.10), so H
+        is 0 there. This matches the physical decay to below 1e-12 once f is 0.02
+        cycles per um past the cutoff at 20 um, and it keeps back-propagation
+        stable, because the exact inverse would amplify these waves. Only grids
+        with pixels smaller than lambda / 2 have evanescent frequencies, such as
+        the 0.24 um grid of the magnified setup.
 
         Returns:
             Complex tensor of shape (M, N) containing the transfer function.
@@ -105,12 +113,13 @@ class AngularSpectrumPropagator(nn.Module):
         # Using computationally stable form for backprop
         k = 2 * np.pi / self.wavelength
 
-        # Mask for evanescent waves (where 1 - (lambda*f)^2 < 0)
+        # Evanescent waves (where 1 - (lambda*f)^2 < 0) do not propagate.
         term_inside_sqrt = 1 - (self.wavelength**2 * f_sq)
+        propagating = term_inside_sqrt >= 0
         term_inside_sqrt = torch.clamp(term_inside_sqrt, min=0)  # Avoid NaNs
 
         phase = k * self.z_distance * torch.sqrt(term_inside_sqrt)
-        h = torch.exp(1j * phase)
+        h = torch.exp(1j * phase) * propagating
         return h
 
     def _precompute_pupil(self, numerical_aperture: float) -> torch.Tensor:

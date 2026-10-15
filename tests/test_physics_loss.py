@@ -1,4 +1,4 @@
-"""Tests for the objective pupil and the scale-invariant physics loss.
+"""Tests for the propagator (evanescent waves, objective pupil) and the physics loss.
 
 The geometry is the magnified setup of dataset 2.0: 532 nm, 0.24 um pixels in the
 object plane, 20 um defocus and a 10x/0.45 objective, so the pupil passes spatial
@@ -106,6 +106,46 @@ def test_invalid_aperture_raises(numerical_aperture: float) -> None:
     """A numerical aperture outside (0, 1.5] is rejected."""
     with pytest.raises(ValueError, match="numerical_aperture"):
         propagator(numerical_aperture)
+
+
+# Evanescent waves --------------------------------------------------------------
+
+
+def evanescent(pixel_size: float) -> torch.Tensor:
+    """Mark the spatial frequencies beyond 1 / wavelength.
+
+    Args:
+        pixel_size (float): Pixel size in meters.
+
+    Returns:
+        torch.Tensor: True where the plane wave is evanescent, on the unshifted grid.
+    """
+    f: torch.Tensor = torch.fft.fftfreq(SIZE, d=pixel_size)
+    g_fx, g_fy = torch.meshgrid(f, f, indexing="ij")
+    return g_fx**2 + g_fy**2 > (1 / WAVELENGTH) ** 2
+
+
+def test_evanescent_waves_are_removed() -> None:
+    """On the 0.24 um grid, 36% of the frequencies are evanescent and none pass."""
+    transfer: torch.Tensor = propagator(None).H
+    mask: torch.Tensor = evanescent(PIXEL)
+    assert 0.35 < float(mask.float().mean()) < 0.37
+    assert float(transfer[mask].abs().max()) == 0.0
+    torch.testing.assert_close(transfer[~mask].abs(), torch.ones(int((~mask).sum())))
+
+
+def test_back_propagation_removes_evanescent_noise() -> None:
+    """The network input loses the evanescent part of the noise, which holds no signal."""
+    noise: torch.Tensor = torch.randn(SIZE, SIZE, generator=torch.Generator().manual_seed(3)).to(torch.complex64)
+    spectrum: torch.Tensor = torch.fft.fft2(propagator(None)(noise, backward=True)).abs()
+    assert float(spectrum[evanescent(PIXEL)].max()) < 1e-4 * float(spectrum.max())
+
+
+def test_lensless_grid_is_unchanged() -> None:
+    """With 4.65 um pixels every frequency propagates, as before."""
+    lensless: AngularSpectrumPropagator = AngularSpectrumPropagator((SIZE, SIZE), WAVELENGTH, 4.65e-6, 0.02)
+    assert not bool(evanescent(4.65e-6).any())
+    torch.testing.assert_close(lensless.H.abs(), torch.ones(SIZE, SIZE))
 
 
 # Scale-invariant physics loss -------------------------------------------------

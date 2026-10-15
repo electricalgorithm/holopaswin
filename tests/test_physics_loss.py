@@ -1,4 +1,4 @@
-"""Tests for the objective pupil of the angular spectrum propagator.
+"""Tests for the objective pupil and the scale-invariant physics loss.
 
 The geometry is the magnified setup of dataset 2.0: 532 nm, 0.24 um pixels in the
 object plane, 20 um defocus and a 10x/0.45 objective, so the pupil passes spatial
@@ -10,6 +10,7 @@ import numpy.typing as npt
 import pytest
 import torch
 
+from holopaswin.loss import PhysicsLoss
 from holopaswin.propagator import AngularSpectrumPropagator
 
 SIZE = 224
@@ -48,6 +49,31 @@ def absorbing_cells() -> torch.Tensor:
     return torch.from_numpy(obj).to(torch.complex64)
 
 
+def as_2ch(field: torch.Tensor) -> torch.Tensor:
+    """Split a complex field into the (1, 2, H, W) real/imaginary layout of the model.
+
+    Args:
+        field (torch.Tensor): Complex field, shape (H, W).
+
+    Returns:
+        torch.Tensor: Real and imaginary parts, shape (1, 2, H, W).
+    """
+    return torch.stack([field.real, field.imag]).unsqueeze(0)
+
+
+def recorded(obj: torch.Tensor) -> torch.Tensor:
+    """Record an object through the objective and normalise it by its mean.
+
+    Args:
+        obj (torch.Tensor): Complex object field, shape (H, W).
+
+    Returns:
+        torch.Tensor: Mean-normalised intensity, shape (1, 1, H, W).
+    """
+    intensity: torch.Tensor = torch.abs(propagator()(obj)) ** 2
+    return (intensity / intensity.mean()).reshape(1, 1, SIZE, SIZE)
+
+
 # Pupil ------------------------------------------------------------------------
 
 
@@ -80,3 +106,47 @@ def test_invalid_aperture_raises(numerical_aperture: float) -> None:
     """A numerical aperture outside (0, 1.5] is rejected."""
     with pytest.raises(ValueError, match="numerical_aperture"):
         propagator(numerical_aperture)
+
+
+# Scale-invariant physics loss -------------------------------------------------
+
+
+def test_physics_term_ignores_the_hologram_scale() -> None:
+    """Multiplying the input hologram by a constant leaves the physics term unchanged."""
+    loss: PhysicsLoss = PhysicsLoss(propagator())
+    hologram: torch.Tensor = recorded(absorbing_cells())
+    pred: torch.Tensor = torch.abs(propagator()(absorbing_cells() * 0.9)).reshape(1, 1, SIZE, SIZE) ** 2
+    reference: torch.Tensor = loss.scale_invariant_physics_loss(pred, hologram)
+    for scale in (0.5, 1.023, 3.0):
+        torch.testing.assert_close(loss.scale_invariant_physics_loss(pred, scale * hologram), reference)
+
+
+def test_correct_absorbing_prediction_has_no_physics_penalty() -> None:
+    """A perfect prediction of an absorbing sample costs nothing.
+
+    Mean normalisation puts the background of this sample above 1, because the
+    cells absorb. Comparing absolute levels would penalise the correct answer.
+    """
+    obj: torch.Tensor = absorbing_cells()
+    hologram: torch.Tensor = recorded(obj)
+    loss: PhysicsLoss = PhysicsLoss(propagator(), lambda_physics=1.0)
+
+    total: torch.Tensor = loss(as_2ch(obj), as_2ch(obj), hologram)
+    absolute: torch.Tensor = torch.mean(torch.abs(torch.abs(propagator()(obj)) ** 2 - hologram[0, 0]))
+
+    assert float(total) < 1e-5
+    assert float(absolute) > 1e-3  # what the old, absolute comparison charged
+
+
+def test_pupil_removes_the_penalty_for_fine_rims() -> None:
+    """Without the pupil, the model predicts rim fringes the camera never records."""
+    obj: torch.Tensor = absorbing_cells()
+    hologram: torch.Tensor = recorded(obj)
+    with_pupil: PhysicsLoss = PhysicsLoss(propagator(), lambda_physics=1.0)
+    without_pupil: PhysicsLoss = PhysicsLoss(propagator(None), lambda_physics=1.0)
+
+    matched: torch.Tensor = with_pupil(as_2ch(obj), as_2ch(obj), hologram)
+    mismatched: torch.Tensor = without_pupil(as_2ch(obj), as_2ch(obj), hologram)
+
+    assert float(matched) < 1e-5
+    assert float(mismatched) > 0.02  # about 8% of the background for these sharp rims

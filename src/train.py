@@ -30,6 +30,10 @@ Z_DIST = 0.02
 # object-plane pixel and a 20 um distance.
 NUMERICAL_APERTURE: float | None = None
 RESIDUAL_MODE = True  # Residual mode for Experiment 12
+# For z-augmented training the physics loss uses the
+# distance at which each hologram was recorded. Its validation loss is then not
+# comparable with a run without it, so compare such models with scripts/z_sweep.py.
+PHYSICS_USE_TRUE_Z = False
 
 # Training Configuration
 BATCH_SIZE = 32
@@ -88,7 +92,9 @@ def main() -> None:  # noqa: C901, PLR0915, PLR0912
     # --- Data Loading & Splitting ---
     print(f"Loading dataset from: {DATA_DIR}")
     try:
-        full_dataset = HoloDataset(data_dir=DATA_DIR, target_size=IMG_SIZE, img_dim=IMG_SIZE)
+        full_dataset = HoloDataset(
+            data_dir=DATA_DIR, target_size=IMG_SIZE, img_dim=IMG_SIZE, return_z=PHYSICS_USE_TRUE_Z
+        )
     except Exception as e:  # noqa: BLE001
         print(f"Error loading dataset: {e}")
         # Identify if path issue
@@ -148,17 +154,19 @@ def main() -> None:  # noqa: C901, PLR0915, PLR0912
             progress_bar = tqdm.tqdm(train_loader, desc="Training", leave=False)
 
             batch_count = 0
-            for holo, gt_obj in progress_bar:
-                holo_in = holo.to(device)
-                gt_obj_in = gt_obj.to(device)
+            for batch in progress_bar:
+                holo_in = batch[0].to(device)
+                gt_obj_in = batch[1].to(device)
+                z_true = batch[2].to(device) if PHYSICS_USE_TRUE_Z else None
 
                 optimizer.zero_grad()
 
                 # Forward pass returns (clean_complex, dirty_complex)
                 pred_clean, _ = model(holo_in)
 
-                # Loss expects (pred_2ch, target_2ch, input_1ch)
-                loss = criterion(pred_clean, gt_obj_in, holo_in)
+                # Loss expects (pred_2ch, target_2ch, input_1ch); z_true only
+                # changes the physics term.
+                loss = criterion(pred_clean, gt_obj_in, holo_in, z_true=z_true)
 
                 loss.backward()
                 optimizer.step()
@@ -180,12 +188,13 @@ def main() -> None:  # noqa: C901, PLR0915, PLR0912
 
             val_batch_count = 0
             with torch.no_grad():  # Disable gradient calculation (saves huge memory/time)
-                for holo, gt_obj in tqdm.tqdm(val_loader, desc="Validating", leave=False):
-                    holo_in = holo.to(device)
-                    gt_obj_in = gt_obj.to(device)
+                for batch in tqdm.tqdm(val_loader, desc="Validating", leave=False):
+                    holo_in = batch[0].to(device)
+                    gt_obj_in = batch[1].to(device)
+                    z_true = batch[2].to(device) if PHYSICS_USE_TRUE_Z else None
 
                     pred, _ = model(holo_in)
-                    loss = criterion(pred, gt_obj_in, holo_in)
+                    loss = criterion(pred, gt_obj_in, holo_in, z_true=z_true)
                     val_loss += loss.item()
 
                     val_batch_count += 1

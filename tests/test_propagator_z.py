@@ -8,6 +8,7 @@ distance must give the same field as a propagator built for that distance.
 import pytest
 import torch
 
+from holopaswin.loss import PhysicsLoss
 from holopaswin.propagator import AngularSpectrumPropagator
 
 SIZE: int = 64
@@ -69,3 +70,37 @@ def test_distance_needs_one_value_per_sample() -> None:
         propagator(random_field(2), z=torch.tensor([20e-6, 21e-6, 22e-6]))
     with pytest.raises(ValueError, match="one distance per sample"):
         propagator(random_field(1)[0, 0], z=torch.tensor([20e-6]))
+
+
+def test_physics_loss_at_the_nominal_distance_is_unchanged() -> None:
+    """Passing the nominal distance as z_true gives the current loss."""
+    propagator: AngularSpectrumPropagator = AngularSpectrumPropagator(
+        (SIZE, SIZE), WAVELENGTH, PIXEL, NOMINAL, numerical_aperture=NA
+    )
+    criterion: PhysicsLoss = PhysicsLoss(propagator, lambda_physics=0.1)
+    prediction: torch.Tensor = torch.view_as_real(random_field(2, seed=1)[:, 0]).permute(0, 3, 1, 2)
+    target: torch.Tensor = torch.view_as_real(random_field(2, seed=2)[:, 0]).permute(0, 3, 1, 2)
+    hologram: torch.Tensor = torch.rand(2, 1, SIZE, SIZE) + 0.5
+    nominal: torch.Tensor = torch.full((2,), NOMINAL)
+    torch.testing.assert_close(
+        criterion(prediction, target, hologram, z_true=nominal),
+        criterion(prediction, target, hologram),
+        atol=1e-6,
+        rtol=1e-6,
+    )
+
+
+def test_physics_loss_prefers_the_true_distance() -> None:
+    """A hologram recorded at 26 um is explained by its object only at 26 um."""
+    propagator: AngularSpectrumPropagator = AngularSpectrumPropagator(
+        (SIZE, SIZE), WAVELENGTH, PIXEL, NOMINAL, numerical_aperture=NA
+    )
+    criterion: PhysicsLoss = PhysicsLoss(propagator, lambda_physics=1.0)
+    obj: torch.Tensor = random_field(1, seed=3)
+    true_distance: torch.Tensor = torch.tensor([26e-6])
+    hologram: torch.Tensor = torch.abs(propagator(obj, z=true_distance)) ** 2
+    obj_2ch: torch.Tensor = torch.view_as_real(obj[:, 0]).permute(0, 3, 1, 2)
+    at_true: torch.Tensor = criterion(obj_2ch, obj_2ch, hologram, z_true=true_distance)
+    at_nominal: torch.Tensor = criterion(obj_2ch, obj_2ch, hologram)
+    assert at_true.item() < 1e-5
+    assert at_nominal.item() > 10 * at_true.item()

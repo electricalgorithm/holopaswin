@@ -75,6 +75,7 @@ class PhysicsLoss(torch.nn.Module):
         pred_obj_2ch: torch.Tensor,
         target_obj_2ch: torch.Tensor,
         input_hologram: torch.Tensor,
+        z_true: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """Compute the physics-constrained loss with Frequency awareness.
 
@@ -84,6 +85,10 @@ class PhysicsLoss(torch.nn.Module):
             target_obj_2ch: Ground truth object tensor of shape (B, 2, H, W).
                             Channel 0: Real, Channel 1: Imag.
             input_hologram: Input hologram intensity tensor of shape (B, 1, H, W).
+            z_true: Distance in meters at which each hologram was recorded, shape
+                (B,), or None for the propagator's distance. Only the physics
+                term uses it, so that z-augmented training compares a correct
+                prediction with its hologram at the right distance.
 
         Returns:
             Total loss value as a scalar tensor.
@@ -117,7 +122,7 @@ class PhysicsLoss(torch.nn.Module):
         # 5. Physics Consistency Loss (Unsupervised constraint)
         # Propagate +z (Forward to Hologram Plane), through the objective pupil
         # when the propagator has a numerical aperture.
-        pred_field_holo = self.propagator(pred_complex, backward=False)
+        pred_field_holo = self.propagator(pred_complex, backward=False, z=z_true)
         pred_hologram = torch.abs(pred_field_holo) ** 2
         loss_phy = self.scale_invariant_physics_loss(pred_hologram, input_hologram)
 

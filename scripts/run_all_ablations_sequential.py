@@ -8,13 +8,13 @@ import argparse
 import subprocess
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 
 def log(message: str, log_file: Path) -> None:
     """Log message to both console and file."""
-    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    timestamp = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
     log_msg = f"[{timestamp}] {message}"
     print(log_msg)
     with log_file.open("a") as f:
@@ -76,7 +76,7 @@ def main() -> None:  # noqa: PLR0915
     log("SEQUENTIAL ABLATION STUDY EXECUTION", main_log)
     log("=" * 80, main_log)
     log(f"Output directory: {output_dir}", main_log)
-    log(f"Start time: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}", main_log)
+    log(f"Start time: {datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S')}", main_log)
     log("", main_log)
 
     overall_start = time.time()
@@ -184,7 +184,7 @@ def main() -> None:  # noqa: PLR0915
     log("5. Compile article with pdflatex", main_log)
 
     log("", main_log)
-    log(f"End time: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}", main_log)
+    log(f"End time: {datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S')}", main_log)
     log("=" * 80, main_log)
 
     # Exit with error if any experiment failed

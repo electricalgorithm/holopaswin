@@ -71,6 +71,19 @@ To calculate full quantitative metrics (SSIM, PSNR, MSE) over the test dataset, 
 uv run src/test.py
 ```
 
+### Distance sweep
+
+`holopaswin sweep` measures how reconstructions degrade when the distance a model assumes is wrong. Generate one test set per distance offset with [hologen](../hologen), all from the same seed, then score the models on them:
+
+```bash
+for dz in -10 -8 -6 -4 -2 -1 0 1 2 4 6 8 10; do
+    hologen generate --output sweep/offset_$dz --z-offset $dz --samples 400 --seed 900000 --no-visualization
+done
+uv run holopaswin sweep sweep --model standard=standard.pth --model z_augmented=zaug.pth --output results/z_sweep
+```
+
+Every model is told only the nominal distance. Two references need no network: back-propagation at the nominal distance and, as an oracle, at the true one. The command writes `per_sample.csv`, `summary.json` (per metric, object family and offset: medians with bootstrap intervals and a paired Wilcoxon test between the first two models) and `z_sweep.png`. Run `holopaswin sweep --help` for all options.
+
 ### Development
 
 This repository includes pre-commit hooks that automatically run code quality checks (`ruff` and `mypy`) before each commit. To install them:

@@ -40,7 +40,11 @@ dependencies = [
     "pandas>=2.3.3",
     "pyarrow>=22.0.0",
     "scipy>=1.11",
+    "typer>=0.27.3",
 ]
+
+[project.scripts]
+holopaswin = "holopaswin.cli:app"
 
 [project.optional-dependencies]
 dev = [

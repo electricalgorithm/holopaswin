@@ -85,7 +85,7 @@ def test_input_is_not_modified_and_dtype_is_kept() -> None:
     assert result.dtype == np.float32
 
 
-# Physics: the scale L_phy relies on (HOLO-001 AC#4) -------------------------
+# Physics: the scale L_phy relies on ---------------------------------------
 
 
 def test_normalised_recording_matches_the_asm_intensity_scale() -> None:

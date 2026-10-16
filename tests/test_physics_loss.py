@@ -1,6 +1,6 @@
 """Tests for the propagator (evanescent waves, objective pupil) and the physics loss.
 
-The geometry is the magnified setup of dataset 2.0: 532 nm, 0.24 um pixels in the
+The geometry is the magnified setup: 532 nm, 0.24 um pixels in the
 object plane, 20 um defocus and a 10x/0.45 objective, so the pupil passes spatial
 frequencies up to 0.45 / 0.532 um = 0.85 cycles per um.
 """
@@ -21,7 +21,7 @@ NA = 0.45
 
 
 def propagator(numerical_aperture: float | None = NA) -> AngularSpectrumPropagator:
-    """Build a propagator with the dataset 2.0 geometry.
+    """Build a propagator with the magnified-setup geometry.
 
     Args:
         numerical_aperture (float | None): Objective NA, or None for no pupil.

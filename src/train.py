@@ -26,7 +26,7 @@ WAVELENGTH = 532e-9
 PIXEL_SIZE = 4.65e-6
 Z_DIST = 0.02
 # Objective NA for the physics loss. None matches the lensless geometry above;
-# dataset 2.0 (magnified IMX183 setup) needs 0.45 together with a 0.24 um
+# the magnified IMX183 setup needs 0.45 together with a 0.24 um
 # object-plane pixel and a 20 um distance.
 NUMERICAL_APERTURE: float | None = None
 RESIDUAL_MODE = True  # Residual mode for Experiment 12

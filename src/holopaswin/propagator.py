@@ -37,6 +37,10 @@ class AngularSpectrumPropagator(nn.Module):
     # (n = 1.52). Larger values point to a unit or typing mistake.
     MAX_NUMERICAL_APERTURE: ClassVar[float] = 1.5
 
+    # Buffers registered in __init__, declared here for type checkers.
+    H: torch.Tensor
+    pupil: torch.Tensor | None
+
     def __init__(
         self,
         shape: tuple[int, int],
@@ -70,20 +74,26 @@ class AngularSpectrumPropagator(nn.Module):
         self.z_distance = z_distance
         self.numerical_aperture = numerical_aperture
 
-        # Precompute transfer function H to save time during training
-        self.H = self._precompute_transfer_function()
-        self.pupil: torch.Tensor | None = (
-            None if numerical_aperture is None else self._precompute_pupil(numerical_aperture)
+        # Precomputed once and registered as non-persistent buffers, so they follow
+        # .to(device) and stay out of checkpoints.
+        root: torch.Tensor
+        propagating: torch.Tensor
+        root, propagating = self._precompute_axial_wavenumber()
+        k: float = 2 * np.pi / self.wavelength
+
+        # Same operation order as before, so H is unchanged bit for bit.
+        self.register_buffer("H", torch.exp(1j * (k * self.z_distance * root)) * propagating, persistent=False)
+        self.register_buffer(
+            "pupil",
+            None if numerical_aperture is None else self._precompute_pupil(numerical_aperture),
+            persistent=False,
         )
 
-    def _precompute_transfer_function(self) -> torch.Tensor:
-        """Precompute the transfer function for wave propagation.
+    def _precompute_axial_wavenumber(self) -> tuple[torch.Tensor, torch.Tensor]:
+        """Precompute the axial part of every plane wave on the grid.
 
-        Computes the frequency-domain transfer function H that represents
-        the propagation kernel. This is precomputed once during initialization
-        for efficiency during training.
-
-        The transfer function is H = exp(i * k * z * sqrt(1 - (lambda * f)^2)),
+        The transfer function over a distance z is
+        H = exp(i * k * z * sqrt(1 - (lambda * f)^2)),
         where k = 2*pi/lambda is the wavenumber, z is the propagation distance,
         lambda is the wavelength, and f is the spatial frequency.
 
@@ -96,7 +106,9 @@ class AngularSpectrumPropagator(nn.Module):
         the 0.24 um grid of the magnified setup.
 
         Returns:
-            Complex tensor of shape (M, N) containing the transfer function.
+            tuple[torch.Tensor, torch.Tensor]: sqrt(1 - (lambda * f)^2), set to 0
+                for evanescent waves, and the mask of propagating waves, both of
+                shape (M, N).
         """
         m, n = self.shape
 
@@ -108,19 +120,12 @@ class AngularSpectrumPropagator(nn.Module):
         # Squared magnitude of spatial frequencies
         f_sq = g_fx**2 + g_fy**2
 
-        # Propagation kernel in frequency domain
-        # H = exp(i * k * z * sqrt(1 - (lambda * f)^2))
-        # Using computationally stable form for backprop
-        k = 2 * np.pi / self.wavelength
-
         # Evanescent waves (where 1 - (lambda*f)^2 < 0) do not propagate.
         term_inside_sqrt = 1 - (self.wavelength**2 * f_sq)
         propagating = term_inside_sqrt >= 0
         term_inside_sqrt = torch.clamp(term_inside_sqrt, min=0)  # Avoid NaNs
 
-        phase = k * self.z_distance * torch.sqrt(term_inside_sqrt)
-        h = torch.exp(1j * phase) * propagating
-        return h
+        return torch.sqrt(term_inside_sqrt), propagating
 
     def _precompute_pupil(self, numerical_aperture: float) -> torch.Tensor:
         """Precompute the coherent transfer function of the objective.
@@ -152,9 +157,10 @@ class AngularSpectrumPropagator(nn.Module):
 
         Returns:
             Propagated complex field tensor of the same shape as input.
+
         """
         # Ensure H is on the same device as input
-        h = self.H.to(complex_field.device)
+        h: torch.Tensor = self.H.to(complex_field.device)
 
         if backward:
             h = torch.conj(h)

@@ -18,6 +18,8 @@ import numpy as np
 import torch
 from torch import nn
 
+BATCH_RANK: int = 4  # (B, C, H, W)
+
 
 class AngularSpectrumPropagator(nn.Module):
     """Differentiable Angular Spectrum Method (ASM) for wave propagation.
@@ -39,6 +41,8 @@ class AngularSpectrumPropagator(nn.Module):
 
     # Buffers registered in __init__, declared here for type checkers.
     H: torch.Tensor
+    kz_root: torch.Tensor
+    propagating: torch.Tensor
     pupil: torch.Tensor | None
 
     def __init__(
@@ -74,14 +78,16 @@ class AngularSpectrumPropagator(nn.Module):
         self.z_distance = z_distance
         self.numerical_aperture = numerical_aperture
 
-        # Precomputed once and registered as non-persistent buffers, so they follow
-        # .to(device) and stay out of checkpoints.
+        # Since z can change, we cannnot pre-compute transfer function.
+        # Instead, we pre-compute whatever we can and register them to buffers.
         root: torch.Tensor
         propagating: torch.Tensor
         root, propagating = self._precompute_axial_wavenumber()
         k: float = 2 * np.pi / self.wavelength
+        self.register_buffer("kz_root", k * root, persistent=False)
+        self.register_buffer("propagating", propagating, persistent=False)
 
-        # Same operation order as before, so H is unchanged bit for bit.
+        # Same operation order as before per-sample distances existed, so H is unchanged bit for bit.
         self.register_buffer("H", torch.exp(1j * (k * self.z_distance * root)) * propagating, persistent=False)
         self.register_buffer(
             "pupil",
@@ -127,6 +133,22 @@ class AngularSpectrumPropagator(nn.Module):
 
         return torch.sqrt(term_inside_sqrt), propagating
 
+    def transfer_function(self, z: torch.Tensor) -> torch.Tensor:
+        """Build the transfer function for a different distance per sample.
+
+        Args:
+            z (torch.Tensor): Propagation distance of each sample in meters,
+                shape (B,).
+
+        Returns:
+            torch.Tensor: Transfer functions of shape (B, 1, M, N), with the same
+                evanescent cut as H, on the device of z.
+        """
+        kz_root: torch.Tensor = self.kz_root.to(z.device)
+        propagating: torch.Tensor = self.propagating.to(z.device)
+        phase: torch.Tensor = kz_root[None, None] * z.to(kz_root.dtype)[:, None, None, None]
+        return torch.exp(1j * phase) * propagating
+
     def _precompute_pupil(self, numerical_aperture: float) -> torch.Tensor:
         """Precompute the coherent transfer function of the objective.
 
@@ -145,7 +167,9 @@ class AngularSpectrumPropagator(nn.Module):
         cutoff: float = numerical_aperture / self.wavelength
         return (g_fx**2 + g_fy**2 <= cutoff**2).to(torch.float32)
 
-    def forward(self, complex_field: torch.Tensor, backward: bool = False) -> torch.Tensor:
+    def forward(
+        self, complex_field: torch.Tensor, backward: bool = False, z: torch.Tensor | None = None
+    ) -> torch.Tensor:
         """Propagate a complex wave field using the Angular Spectrum Method.
 
         Args:
@@ -154,13 +178,30 @@ class AngularSpectrumPropagator(nn.Module):
             backward: If True, performs backward propagation (conjugate of transfer function).
                      If False, performs forward propagation, through the objective pupil
                      when a numerical aperture is set. Defaults to False.
+            z: Propagation distance of each sample in meters, shape (B,), for a
+                batch of shape (B, C, H, W) whose samples were recorded at
+                different distances. None uses the distance the propagator was
+                built with.
 
         Returns:
             Propagated complex field tensor of the same shape as input.
 
+        Raises:
+            ValueError: If z is given and does not hold one distance per sample
+                of a (B, C, H, W) batch.
         """
-        # Ensure H is on the same device as input
-        h: torch.Tensor = self.H.to(complex_field.device)
+        h: torch.Tensor
+        if z is None:
+            # Ensure H is on the same device as input
+            h = self.H.to(complex_field.device)
+        else:
+            if complex_field.dim() != BATCH_RANK or z.shape != (complex_field.shape[0],):
+                msg: str = (
+                    f"z must hold one distance per sample of a (B, C, H, W) batch; got z of shape "
+                    f"{tuple(z.shape)} for a field of shape {tuple(complex_field.shape)}."
+                )
+                raise ValueError(msg)
+            h = self.transfer_function(z.to(complex_field.device))
 
         if backward:
             h = torch.conj(h)

@@ -1,0 +1,9 @@
+# Test set at a quarter of the calibrated exposures, so twice the relative shot
+# noise. Same seeds and groups as test.toml; its ideal groups equal the test set.
+[dataset]
+total_samples = 1000
+seed = 200000
+
+[objects]
+red_blood_cells_background_electrons = 684.0  # e- per pixel, 2735 / 4
+adherent_cells_background_electrons = 464.0  # e- per pixel, 1855 / 4

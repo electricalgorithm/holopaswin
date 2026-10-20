@@ -1,0 +1,8 @@
+# Training set with recording-distance errors, from the same seeds as train.toml,
+# so both hold the same cells and differ only in the distance (14-26 um).
+[dataset]
+total_samples = 8000
+seed = 10000
+
+[geometry]
+z_error = 6.0  # um

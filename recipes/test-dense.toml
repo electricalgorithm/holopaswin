@@ -1,0 +1,10 @@
+# Test set with crowded fields: twice the adherent coverage and three times the
+# red blood cell density of training. It places other cells than test.toml, so
+# it has its own seeds.
+[dataset]
+total_samples = 400
+seed = 300000
+
+[objects]
+adherent_coverage = 0.5  # fraction of the field
+red_blood_cell_density = 0.01245  # cells per um^2

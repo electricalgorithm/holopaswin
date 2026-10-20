@@ -51,6 +51,24 @@ This project uses [uv](https://github.com/astral-sh/uv) for fast and reliable de
 
 Every workflow runs through the `holopaswin` command; `holopaswin COMMAND --help` lists all options. Datasets come from [hologen](../hologen), and each one carries its geometry (wavelength, pixel size, distance, objective NA, image size) in the `recipe.toml` hologen saves with it, so no command takes these values as options.
 
+### Paper datasets
+
+`recipes/` holds the hologen recipe of every dataset used in the paper. Each file sets only what differs from hologen's default recipe; the generated folder's `recipe.toml` holds the complete recipe.
+
+| Set | Command | Seeds | Holograms |
+|---|---|---|---|
+| training | `hologen generate --recipe recipes/train.toml --output train` | 10000-17999 | 8,000 |
+| training with distance errors | `hologen generate --recipe recipes/train-z-augmented.toml --output train-z-augmented` | 10000-17999 | 8,000 |
+| test | `hologen generate --recipe recipes/test.toml --output test` | 200000-200999 | 1,000 |
+| phase x 2 | `hologen generate --recipe recipes/test-phase.toml --output test-phase` | 200000-200999 | 1,000 |
+| absorbing red blood cells | `hologen generate --recipe recipes/test-absorption.toml --output test-absorption` | 200000-200999 | 1,000 |
+| low light | `hologen generate --recipe recipes/test-low-light.toml --output test-low-light` | 200000-200999 | 1,000 |
+| strong speckle | `hologen generate --recipe recipes/test-strong-speckle.toml --output test-strong-speckle` | 200000-200999 | 1,000 |
+| dense | `hologen generate --recipe recipes/test-dense.toml --output test-dense` | 300000-300399 | 400 |
+| distance sweep | see [Distance sweep](#distance-sweep) | 900000-900199 | 200 per offset |
+
+The phase, absorption, low-light and strong-speckle sets share the test set's seeds and groups, so hologram i of each holds the same cells as test hologram i and differs in one property. The phase, absorption, strong-speckle and dense recipes change settings the exposures were calibrated for, so `hologen generate` warns for them; they keep the training exposures on purpose.
+
 ### Training
 
 Training is configured by a TOML file, like a hologen recipe. Write the defaults, edit them, and train; options override the file:
@@ -92,11 +110,11 @@ uv run holopaswin benchmark --model runs/holopaswin --data ../hologen/test --bat
 
 ### Distance sweep
 
-`holopaswin sweep` measures how reconstructions degrade when the distance a model assumes is wrong. Generate one test set per distance offset with [hologen](../hologen), all from the same seed, then score the models on them:
+`holopaswin sweep` measures how reconstructions degrade when the distance a model assumes is wrong. Generate one test set per distance offset from `recipes/sweep.toml`, all from the same seeds, then score the models on them:
 
 ```bash
 for dz in -10 -8 -6 -4 -2 -1 0 1 2 4 6 8 10; do
-    hologen generate --output sweep/offset_$dz --z-offset $dz --samples 400 --seed 900000 --no-visualization
+    hologen generate --recipe recipes/sweep.toml --output sweep/offset_$dz --z-offset $dz --no-visualization
 done
 uv run holopaswin sweep sweep --model standard=runs/holopaswin --model z_augmented=runs/zaug --output results/z_sweep
 ```

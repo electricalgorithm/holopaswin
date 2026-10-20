@@ -119,3 +119,15 @@ def test_an_image_size_other_than_the_stored_one_is_rejected(tmp_path: pathlib.P
     write_dataset(tmp_path, [20.0] * COUNT)
     with pytest.raises(ValueError, match="8 x 8"):
         HoloDataset(str(tmp_path), target_size=4, img_dim=16)
+
+
+def test_ground_truth_that_does_not_match_the_holograms_is_rejected(tmp_path: pathlib.Path) -> None:
+    """A ground-truth file with fewer rows than its hologram file cannot be paired."""
+    write_dataset(tmp_path / "data", None)
+    (tmp_path / "short").mkdir()
+    write_images(
+        tmp_path / "short", np.full((COUNT - 1, SIZE, SIZE), 1000.0), np.ones((COUNT - 1, SIZE, SIZE), dtype=complex)
+    )
+    (tmp_path / "short" / "ground_truth_0000.parquet").replace(tmp_path / "data" / "ground_truth_0000.parquet")
+    with pytest.raises(ValueError, match="same size"):
+        HoloDataset(str(tmp_path / "data"), target_size=SIZE, img_dim=SIZE)

@@ -109,9 +109,15 @@ class HoloDataset(Dataset[tuple[torch.Tensor, ...]]):
             hologram_file: pq.ParquetFile
             shape: tuple[int, int]
             hologram_file, shape = self._open_image_file(h_path)
-            self._open_image_file(gt_path)
+            truth_file: pq.ParquetFile
+            truth_shape: tuple[int, int]
+            truth_file, truth_shape = self._open_image_file(gt_path)
             if shape != (self.img_dim, self.img_dim):
                 msg: str = f"{h_path} holds {shape[0]} x {shape[1]} images, not {self.img_dim} x {self.img_dim}."
+                raise ValueError(msg)
+            # Items pair the same row of both files, so the files must hold the same images.
+            if truth_shape != shape or truth_file.metadata.num_rows != hologram_file.metadata.num_rows:
+                msg = f"{gt_path} does not hold one ground truth of the same size per hologram in {h_path}."
                 raise ValueError(msg)
             self.samples_index.append(
                 {"holo_path": str(h_path), "gt_path": str(gt_path), "count": hologram_file.metadata.num_rows}

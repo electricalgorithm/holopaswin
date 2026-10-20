@@ -4,6 +4,8 @@ holopaswin config [--output FILE]
     write the default training configuration as TOML
 holopaswin train DATA_DIR [--config FILE] [OPTIONS]
     train a network on a hologen dataset
+holopaswin evaluate TEST_DIR [--model NAME=RUN] [--baseline NAME] [OPTIONS]
+    score networks and classical baselines on a test set
 holopaswin sweep SWEEP_ROOT --model NAME=RUN [OPTIONS]
     score models on test sets recorded at a wrong distance
 """
@@ -155,6 +157,78 @@ def train(  # noqa: PLR0913 (one argument per command-line option)
     except KeyboardInterrupt as interrupt:
         raise typer.Exit(code=130) from interrupt
     typer.echo(f"Run saved to {output}")
+
+
+@app.command()
+def evaluate(  # noqa: PLR0913 (one argument per command-line option)
+    test_dir: Annotated[
+        pathlib.Path,
+        typer.Argument(help="hologen test set; its recipe.toml gives the geometry.", exists=True, file_okay=False),
+    ],
+    model: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--model",
+            "-m",
+            help="Model to score as NAME=RUN, where RUN is a run folder of holopaswin train or a HoloPASWIN "
+            "checkpoint; repeat for several.",
+        ),
+    ] = None,
+    baseline: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--baseline",
+            "-b",
+            help="Classical reconstruction to score: asm (back-propagation), gs50 or gs100 (Gerchberg-Saxton); "
+            "repeat for several.",
+        ),
+    ] = None,
+    output: Annotated[
+        pathlib.Path, typer.Option("--output", "-o", help="Folder for per_sample.csv and summary.json.")
+    ] = pathlib.Path("evaluation"),
+    batch_size: Annotated[int, typer.Option(help="Holograms per forward pass.", min=1)] = 4,
+    limit: Annotated[
+        int | None, typer.Option(help="Holograms to use, for a quick check. (default: all)", min=1)
+    ] = None,
+    device: Annotated[
+        str | None,
+        typer.Option(help="Torch device, e.g. cpu or cuda. (default: CUDA, then MPS, then CPU)"),
+    ] = None,
+) -> None:
+    """Score networks and classical baselines on a test set.
+
+    Every hologram is scored with the metrics of the paper's tables. The summary
+    gives, per metric and method, the mean and standard deviation and the median
+    with a bootstrap interval, overall, per object family and per noise
+    configuration. Paired Wilcoxon tests compare the first two methods, counting
+    the models in the order given and then the baselines, with a Holm correction
+    over the groups of each metric.
+
+    \f
+    Args:
+        test_dir (pathlib.Path): Test set folder.
+        model (list[str] | None): NAME=RUN specifications.
+        baseline (list[str] | None): Baseline names.
+        output (pathlib.Path): Folder for the results.
+        batch_size (int): Holograms per forward pass.
+        limit (int | None): Holograms to use, or None for all.
+        device (str | None): Torch device name, or None to choose one.
+
+    Raises:
+        typer.Exit: With code 2 if a model, a baseline or the test set is invalid.
+    """  # noqa: D301 (typer hides the text after the form feed from --help)
+    from holopaswin.evaluation.report import run_evaluation, write_evaluation  # noqa: PLC0415
+    from holopaswin.evaluation.scoring import parse_model_specs  # noqa: PLC0415
+
+    baselines: list[str] = baseline or []
+    try:
+        runs: dict[str, pathlib.Path] = parse_model_specs(model or [])
+        table: pd.DataFrame = run_evaluation(test_dir, runs, baselines, select_device(device), batch_size, limit)
+    except (ValueError, FileNotFoundError) as error:
+        typer.echo(f"Error: {error}", err=True)
+        raise typer.Exit(code=2) from error
+    metrics: list[str] = write_evaluation(table, [*runs, *baselines], output)
+    typer.echo(f"Scored {len(table)} reconstructions with {', '.join(metrics)}; results in {output}")
 
 
 @app.command()

@@ -174,6 +174,53 @@ def test_invalid_training_requests_are_a_clear_error(
     assert message in result.output
 
 
+def test_evaluate_scores_models_and_baselines_with_breakdowns(
+    tmp_path: pathlib.Path, checkpoints: dict[str, pathlib.Path]
+) -> None:
+    """A checkpoint and two baselines are scored, summarised and compared."""
+    write_dataset(tmp_path / "test")
+    output: pathlib.Path = tmp_path / "out"
+    result: Result = runner.invoke(
+        app,
+        [
+            "evaluate",
+            str(tmp_path / "test"),
+            "--model",
+            f"standard={checkpoints['standard']}",
+            "--baseline",
+            "asm",
+            "--baseline",
+            "gs50",
+            "-o",
+            str(output),
+            "--device",
+            "cpu",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    table: pd.DataFrame = pd.read_csv(output / "per_sample.csv")
+    assert set(table["method"]) == {"standard", "asm", "gs50"}
+    assert len(table) == 3 * COUNT
+    summary: dict = json.loads((output / "summary.json").read_text())
+    psnr: dict = summary["metrics"]["phase_psnr"]
+    assert set(psnr["standard"]) == {"all", "object_family", "config_name"}
+    assert set(psnr["standard"]["all"]) == {"n", "mean", "std", "median", "ci_low", "ci_high"}
+    assert set(psnr["asm"]["config_name"]) == {"camera", "camera_laser_speckle"}
+    assert summary["compared"] == ["standard", "asm"]
+    assert set(summary["paired_tests"]["phase_psnr"]) == {"all", "object_family", "config_name"}
+
+
+@pytest.mark.parametrize(
+    ("arguments", "message"), [(["--baseline", "gs7"], "Unknown baseline"), ([], "at least one --model or --baseline")]
+)
+def test_invalid_evaluations_are_a_clear_error(tmp_path: pathlib.Path, arguments: list[str], message: str) -> None:
+    """Unknown baselines and an empty method list stop with exit code 2."""
+    write_dataset(tmp_path / "test")
+    result: Result = runner.invoke(app, ["evaluate", str(tmp_path / "test"), "-o", str(tmp_path / "out"), *arguments])
+    assert result.exit_code == 2
+    assert message in result.output
+
+
 def test_an_interrupted_training_exits_with_130(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Ctrl-C ends the command with the conventional exit code and keeps the weights."""
 
@@ -195,3 +242,23 @@ def test_an_interrupted_training_exits_with_130(tmp_path: pathlib.Path, monkeypa
     )
     assert result.exit_code == 130
     assert (tmp_path / "run" / "interrupted.pth").is_file()
+
+
+@pytest.mark.parametrize(
+    ("command", "message"),
+    [
+        (["evaluate", "{data}", "-m", "=x.pth"], "needs a name"),
+        (["evaluate", "{data}", "-b", "asm", "-m", "a={data}/missing"], "not found"),
+        (["train", "{data}", "--architecture", "unet"], "lacks the geometry value"),
+    ],
+)
+def test_broken_inputs_are_a_clear_error(tmp_path: pathlib.Path, command: list[str], message: str) -> None:
+    """Missing names, runs and geometry values stop with exit code 2, not a traceback."""
+    write_dataset(tmp_path / "data")
+    if command[0] == "train":
+        (tmp_path / "data" / "recipe.toml").write_text("[geometry]\nresolution = 64\n")
+    arguments: list[str] = [part.format(data=tmp_path / "data") for part in command]
+    result: Result = runner.invoke(app, [*arguments, "-o", str(tmp_path / "out")])
+    assert result.exit_code == 2
+    assert message in result.output
+    assert not (tmp_path / "out" / "config.toml").exists()

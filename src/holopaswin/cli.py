@@ -6,6 +6,8 @@ holopaswin train DATA_DIR [--config FILE] [OPTIONS]
     train a network on a hologen dataset
 holopaswin evaluate TEST_DIR [--model NAME=RUN] [--baseline NAME] [OPTIONS]
     score networks and classical baselines on a test set
+holopaswin figure TEST_DIR --samples 0,5 [--model NAME=RUN] [--baseline NAME] [OPTIONS]
+    draw the reconstructions of some test holograms side by side
 holopaswin sweep SWEEP_ROOT --model NAME=RUN [OPTIONS]
     score models on test sets recorded at a wrong distance
 """
@@ -229,6 +231,103 @@ def evaluate(  # noqa: PLR0913 (one argument per command-line option)
         raise typer.Exit(code=2) from error
     metrics: list[str] = write_evaluation(table, [*runs, *baselines], output)
     typer.echo(f"Scored {len(table)} reconstructions with {', '.join(metrics)}; results in {output}")
+
+
+def parse_integers(text: str, option: str, count: int | None = None) -> list[int]:
+    """Read a comma-separated list of integers given on the command line.
+
+    Args:
+        text (str): The option value, e.g. "0,5,9".
+        option (str): Name of the option, for the error message.
+        count (int | None): Number of integers required, or None for any number.
+
+    Returns:
+        list[int]: The integers.
+
+    Raises:
+        ValueError: If the value is not a list of integers of the required length.
+    """
+    try:
+        values: list[int] = [int(part) for part in text.split(",")]
+    except ValueError as error:
+        msg: str = f"{option} expects comma-separated integers, got {text!r}."
+        raise ValueError(msg) from error
+    if count is not None and len(values) != count:
+        msg = f"{option} expects {count} comma-separated integers, got {text!r}."
+        raise ValueError(msg)
+    return values
+
+
+@app.command()
+def figure(  # noqa: PLR0913 (one argument per command-line option)
+    test_dir: Annotated[
+        pathlib.Path,
+        typer.Argument(help="hologen test set; its recipe.toml gives the geometry.", exists=True, file_okay=False),
+    ],
+    samples: Annotated[str, typer.Option(help="Indices of the holograms to draw, e.g. 0,5,9.")],
+    model: Annotated[
+        list[str] | None,
+        typer.Option("--model", "-m", help="Model to draw as NAME=RUN (run folder or checkpoint); repeat for several."),
+    ] = None,
+    baseline: Annotated[
+        list[str] | None,
+        typer.Option("--baseline", "-b", help="Classical reconstruction to draw: asm, gs50 or gs100; repeatable."),
+    ] = None,
+    output: Annotated[pathlib.Path, typer.Option("--output", "-o", help="PNG file to write.")] = pathlib.Path(
+        "reconstructions.png"
+    ),
+    zoom: Annotated[
+        str | None, typer.Option(help="Region to enlarge in every panel as COLUMN,ROW,SIZE in pixels.")
+    ] = None,
+    error: Annotated[bool, typer.Option(help="Add a row with the absolute phase error of every method.")] = False,
+    device: Annotated[
+        str | None,
+        typer.Option(help="Torch device, e.g. cpu or cuda. (default: CUDA, then MPS, then CPU)"),
+    ] = None,
+) -> None:
+    """Draw the reconstructions of some test holograms side by side.
+
+    Each sample gets a row with the hologram, the phase of every method and the
+    true phase on one colour scale.
+
+    \f
+    Args:
+        test_dir (pathlib.Path): Test set folder.
+        samples (str): Comma-separated sample indices.
+        model (list[str] | None): NAME=RUN specifications.
+        baseline (list[str] | None): Baseline names.
+        output (pathlib.Path): PNG file.
+        zoom (str | None): COLUMN,ROW,SIZE of the region to enlarge, or None.
+        error (bool): Whether to add error rows.
+        device (str | None): Torch device name, or None to choose one.
+
+    Raises:
+        typer.Exit: With code 2 if a model, a baseline, a sample or the zoom is invalid.
+    """  # noqa: D301 (typer hides the text after the form feed from --help)
+    from holopaswin.evaluation.figures import check_zoom, draw_figure, reconstruct_samples  # noqa: PLC0415
+    from holopaswin.evaluation.scoring import parse_model_specs  # noqa: PLC0415
+    from holopaswin.models import read_geometry  # noqa: PLC0415
+
+    try:
+        indices: list[int] = parse_integers(samples, "--samples")
+        region: list[int] | None = None if zoom is None else parse_integers(zoom, "--zoom", count=3)
+        check_zoom(None if region is None else (region[0], region[1], region[2]), read_geometry(test_dir).resolution)
+        holograms, targets, fields = reconstruct_samples(
+            test_dir, parse_model_specs(model or []), baseline or [], indices, select_device(device)
+        )
+        output.parent.mkdir(parents=True, exist_ok=True)
+        draw_figure(
+            holograms,
+            targets,
+            fields,
+            output,
+            zoom=None if region is None else (region[0], region[1], region[2]),
+            error=error,
+        )
+    except (ValueError, FileNotFoundError) as problem:
+        typer.echo(f"Error: {problem}", err=True)
+        raise typer.Exit(code=2) from problem
+    typer.echo(f"Figure saved to {output}")
 
 
 @app.command()

@@ -7,9 +7,11 @@ import pandas as pd
 import pytest
 import torch
 from holo_fixtures import COUNT, SIZE, write_dataset
+from PIL import Image
 from typer.testing import CliRunner, Result
 
 from holopaswin.cli import app
+from holopaswin.evaluation.figures import PANEL_PIXELS
 from holopaswin.model import HoloPASWIN
 from holopaswin.training import trainer
 from holopaswin.training.config import default_config, load_config
@@ -219,6 +221,48 @@ def test_invalid_evaluations_are_a_clear_error(tmp_path: pathlib.Path, arguments
     result: Result = runner.invoke(app, ["evaluate", str(tmp_path / "test"), "-o", str(tmp_path / "out"), *arguments])
     assert result.exit_code == 2
     assert message in result.output
+
+
+@pytest.mark.parametrize(("extra", "rows"), [([], 2), (["--error", "--zoom", "16,16,20"], 4)])
+def test_figure_draws_one_row_per_sample(
+    tmp_path: pathlib.Path, checkpoints: dict[str, pathlib.Path], extra: list[str], rows: int
+) -> None:
+    """Two samples with one model and one baseline give a 4-column grid."""
+    write_dataset(tmp_path / "test")
+    output: pathlib.Path = tmp_path / "figure.png"
+    result: Result = runner.invoke(
+        app,
+        [
+            "figure",
+            str(tmp_path / "test"),
+            "-m",
+            f"standard={checkpoints['standard']}",
+            "-b",
+            "asm",
+            "--samples",
+            "0,2",
+            "-o",
+            str(output),
+            "--device",
+            "cpu",
+            *extra,
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    width: int
+    height: int
+    width, height = Image.open(output).size
+    assert (width, height) == (4 * PANEL_PIXELS, rows * PANEL_PIXELS)
+
+
+def test_figure_rejects_samples_outside_the_set(tmp_path: pathlib.Path) -> None:
+    """A sample index beyond the test set stops with exit code 2."""
+    write_dataset(tmp_path / "test")
+    result: Result = runner.invoke(
+        app, ["figure", str(tmp_path / "test"), "-b", "asm", "--samples", "0,9", "-o", str(tmp_path / "f.png")]
+    )
+    assert result.exit_code == 2
+    assert "sample 9" in result.output
 
 
 def test_an_interrupted_training_exits_with_130(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:

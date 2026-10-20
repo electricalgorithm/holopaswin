@@ -11,6 +11,8 @@ from typer.testing import CliRunner, Result
 
 from holopaswin.cli import app
 from holopaswin.model import HoloPASWIN
+from holopaswin.training import trainer
+from holopaswin.training.config import default_config, load_config
 
 runner: CliRunner = CliRunner()
 
@@ -126,3 +128,70 @@ def test_sweep_help_hides_the_docstring_details() -> None:
     assert result.exit_code == 0
     assert "wrong distance" in result.output
     assert "Args:" not in result.output
+
+
+def test_config_writes_the_default_training_configuration(tmp_path: pathlib.Path) -> None:
+    """Holopaswin config writes a file that loads as the defaults."""
+    path: pathlib.Path = tmp_path / "config.toml"
+    result: Result = runner.invoke(app, ["config", "--output", str(path)])
+    assert result.exit_code == 0, result.output
+    assert load_config(path) == default_config()
+
+
+def test_train_writes_a_run_and_flags_override_the_config(tmp_path: pathlib.Path) -> None:
+    """Flags win over the config file, and the saved config records them."""
+    write_dataset(tmp_path / "data", count=8)
+    config: pathlib.Path = tmp_path / "config.toml"
+    config.write_text('[model]\narchitecture = "unet"\n\n[training]\nepochs = 5\nbatch_size = 2\n')
+    run: pathlib.Path = tmp_path / "run"
+    result: Result = runner.invoke(
+        app,
+        ["train", str(tmp_path / "data"), "--config", str(config), "--epochs", "1", "-o", str(run), "--device", "cpu"],
+    )
+    assert result.exit_code == 0, result.output
+    saved = load_config(run / "config.toml")
+    assert (saved.model.architecture, saved.training.epochs, saved.training.batch_size) == ("unet", 1, 2)
+    assert "Epoch 1/1" in result.output
+
+    resumed: Result = runner.invoke(
+        app, ["train", str(tmp_path / "data"), "-o", str(run), "--resume", "--epochs", "2", "--device", "cpu"]
+    )
+    assert resumed.exit_code == 0, resumed.output
+    assert "Epoch 2/2" in resumed.output
+    assert pd.read_csv(run / "history.csv")["epoch"].tolist() == [1, 2]
+
+
+@pytest.mark.parametrize(
+    ("arguments", "message"), [(["--architecture", "vit"], "Unknown architecture"), (["--resume"], "nothing to resume")]
+)
+def test_invalid_training_requests_are_a_clear_error(
+    tmp_path: pathlib.Path, arguments: list[str], message: str
+) -> None:
+    """Bad options stop with exit code 2 and say why."""
+    write_dataset(tmp_path / "data", count=8)
+    result: Result = runner.invoke(app, ["train", str(tmp_path / "data"), "-o", str(tmp_path / "run"), *arguments])
+    assert result.exit_code == 2
+    assert message in result.output
+
+
+def test_an_interrupted_training_exits_with_130(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ctrl-C ends the command with the conventional exit code and keeps the weights."""
+
+    def interrupt(*_: object, **__: object) -> float:
+        """Stand in for an epoch that the user interrupts.
+
+        Returns:
+            float: Never returns.
+
+        Raises:
+            KeyboardInterrupt: Always.
+        """
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(trainer, "_run_epoch", interrupt)
+    write_dataset(tmp_path / "data", count=8)
+    result: Result = runner.invoke(
+        app, ["train", str(tmp_path / "data"), "-o", str(tmp_path / "run"), "--architecture", "unet", "--device", "cpu"]
+    )
+    assert result.exit_code == 130
+    assert (tmp_path / "run" / "interrupted.pth").is_file()

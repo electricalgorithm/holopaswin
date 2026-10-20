@@ -1,5 +1,9 @@
 """Command-line interface of holopaswin.
 
+holopaswin config [--output FILE]
+    write the default training configuration as TOML
+holopaswin train DATA_DIR [--config FILE] [OPTIONS]
+    train a network on a hologen dataset
 holopaswin sweep SWEEP_ROOT --model NAME=RUN [OPTIONS]
     score models on test sets recorded at a wrong distance
 """
@@ -46,6 +50,111 @@ def select_device(name: str | None) -> "torch.device":
     if torch.backends.mps.is_available():
         return torch.device("mps")
     return torch.device("cpu")
+
+
+@app.command("config")
+def config_command(
+    output: Annotated[
+        pathlib.Path | None,
+        typer.Option("--output", "-o", help="Write to this file instead of printing."),
+    ] = None,
+) -> None:
+    """Write the default training configuration, with the source of every value.
+
+    \f
+    Args:
+        output (pathlib.Path | None): File to write to; printed if None.
+    """  # noqa: D301 (typer hides the text after the form feed from --help)
+    from holopaswin.training.config import config_to_toml, default_config  # noqa: PLC0415
+
+    text: str = config_to_toml(default_config())
+    if output is None:
+        typer.echo(text, nl=False)
+        return
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(text)
+    typer.echo(f"Configuration written to {output}")
+
+
+@app.command()
+def train(  # noqa: PLR0913 (one argument per command-line option)
+    data_dir: Annotated[
+        pathlib.Path,
+        typer.Argument(
+            help="hologen dataset to train on; its recipe.toml gives the geometry.", exists=True, file_okay=False
+        ),
+    ],
+    output: Annotated[
+        pathlib.Path,
+        typer.Option(
+            "--output", "-o", help="Run folder for model.pth, last.pth, config.toml, recipe.toml and history.csv."
+        ),
+    ] = pathlib.Path("run"),
+    config: Annotated[
+        pathlib.Path | None,
+        typer.Option(
+            help="Training configuration (see holopaswin config). The options below override it. "
+            "(default: the defaults, or the run's own config with --resume)",
+            exists=True,
+            dir_okay=False,
+        ),
+    ] = None,
+    resume: Annotated[bool, typer.Option(help="Continue the run in --output after its last finished epoch.")] = False,
+    architecture: Annotated[str | None, typer.Option(help="Network: holopaswin, unet, resnet_unet or hrnet.")] = None,
+    epochs: Annotated[int | None, typer.Option(help="Total number of epochs.", min=1)] = None,
+    batch_size: Annotated[int | None, typer.Option(help="Holograms per step.", min=1)] = None,
+    seed: Annotated[int | None, typer.Option(help="Seed of the training and validation split.")] = None,
+    device: Annotated[
+        str | None,
+        typer.Option(help="Torch device, e.g. cpu or cuda. (default: CUDA, then MPS, then CPU)"),
+    ] = None,
+) -> None:
+    """Train a network on a hologen dataset.
+
+    Every architecture is trained with the same loop and the physics loss. The run
+    folder keeps the best model by validation loss, the state for resuming, the
+    configuration, the dataset's geometry and the loss per epoch.
+
+    \f
+    Args:
+        data_dir (pathlib.Path): Training set folder.
+        output (pathlib.Path): Run folder.
+        config (pathlib.Path | None): Configuration file, or None.
+        resume (bool): Whether to continue the run in the folder.
+        architecture (str | None): Network override.
+        epochs (int | None): Epochs override.
+        batch_size (int | None): Batch size override.
+        seed (int | None): Split seed override.
+        device (str | None): Torch device name, or None to choose one.
+
+    Raises:
+        typer.Exit: With code 2 if the configuration or the run folder is invalid,
+            and with code 130 if training is interrupted.
+    """  # noqa: D301 (typer hides the text after the form feed from --help)
+    from holopaswin.training.config import (  # noqa: PLC0415
+        TrainingConfig,
+        default_config,
+        load_config,
+        with_overrides,
+    )
+    from holopaswin.training.trainer import train as run_training  # noqa: PLC0415
+
+    try:
+        base: TrainingConfig
+        if config is not None:
+            base = load_config(config)
+        elif resume and (output / "config.toml").is_file():
+            base = load_config(output / "config.toml")
+        else:
+            base = default_config()
+        chosen: TrainingConfig = with_overrides(base, architecture, epochs, batch_size, seed)
+        run_training(data_dir, chosen, output, select_device(device), resume=resume, report=typer.echo)
+    except (ValueError, FileNotFoundError) as error:
+        typer.echo(f"Error: {error}", err=True)
+        raise typer.Exit(code=2) from error
+    except KeyboardInterrupt as interrupt:
+        raise typer.Exit(code=130) from interrupt
+    typer.echo(f"Run saved to {output}")
 
 
 @app.command()

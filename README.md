@@ -105,7 +105,7 @@ Every model is told only the nominal distance. Two references need no network: b
 
 ### Development
 
-Install with the development extra, `uv sync --extra dev`, and run the tests with `uv run pytest`.
+Install with the development extra, `uv sync --extra dev`, and run the tests with `uv run pytest`. Every run measures branch coverage of the package and fails below 97 percent; add `--no-cov` when running a single test file.
 
 This repository includes pre-commit hooks that automatically run code quality checks (`ruff` and `mypy`) before each commit. To install them:
 

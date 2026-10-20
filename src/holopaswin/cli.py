@@ -51,7 +51,7 @@ def select_device(name: str | None) -> "torch.device":
 
     if name is not None:
         return torch.device(name)
-    if torch.cuda.is_available():
+    if torch.cuda.is_available():  # pragma: no cover  (no CUDA on the test machine)
         return torch.device("cuda")
     if torch.backends.mps.is_available():
         return torch.device("mps")

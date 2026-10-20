@@ -30,7 +30,7 @@ def synchronize(device: torch.device) -> None:
     Args:
         device (torch.device): The device to wait for.
     """
-    if device.type == "cuda":
+    if device.type == "cuda":  # pragma: no cover  (no CUDA on the test machine)
         torch.cuda.synchronize()
     elif device.type == "mps":
         torch.mps.synchronize()

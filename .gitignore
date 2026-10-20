@@ -9,3 +9,5 @@ logs/
 .ruff_cache/
 .cursor/
 **/*egg-info*
+.coverage
+build/

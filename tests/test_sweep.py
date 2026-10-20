@@ -6,7 +6,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from holopaswin.evaluation.sweep import bootstrap_median, find_sweep_sets, holm, summarise
+from holopaswin.evaluation.statistics import bootstrap_median, holm, paired_tests
+from holopaswin.evaluation.sweep import find_sweep_sets, summarise
 
 
 def write_recipe(folder: pathlib.Path, offset: float, error: float = 0.0, resolution: int = 64) -> None:
@@ -119,3 +120,19 @@ def test_bootstrap_median_brackets_the_median() -> None:
     assert small[1] <= small[0] <= small[2]
     assert large[2] - large[1] < small[2] - small[1]
     assert bootstrap_median(np.arange(9.0), seed=3) == bootstrap_median(np.arange(9.0), seed=3)
+
+
+def test_paired_tests_pair_holograms_within_each_group() -> None:
+    """Grouped by object family, each group compares the same holograms of both methods."""
+    rows: list[dict[str, object]] = []
+    for index in range(12):
+        family: str = "cells" if index % 2 else "discs"
+        gain: float = 1.0 if family == "cells" else 3.0
+        rows.append({"method": "a", "index": index, "object_family": family, "phase_psnr": 20.0 + index + gain})
+        rows.append({"method": "b", "index": index, "object_family": family, "phase_psnr": 20.0 + index})
+    table: pd.DataFrame = pd.DataFrame(rows).sample(frac=1.0, random_state=1)
+    tests: dict = paired_tests(table, "phase_psnr", "a", "b", by="object_family")
+    assert tests["cells"]["median_difference"] == pytest.approx(1.0)
+    assert tests["discs"]["median_difference"] == pytest.approx(3.0)
+    assert tests["cells"]["n_used"] == 6
+    assert tests["cells"]["p_holm"] >= tests["cells"]["p"]

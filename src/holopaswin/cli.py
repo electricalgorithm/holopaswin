@@ -1,6 +1,6 @@
 """Command-line interface of holopaswin.
 
-holopaswin sweep SWEEP_ROOT --model NAME=CHECKPOINT [OPTIONS]
+holopaswin sweep SWEEP_ROOT --model NAME=RUN [OPTIONS]
     score models on test sets recorded at a wrong distance
 """
 
@@ -63,7 +63,8 @@ def sweep(  # noqa: PLR0913 (one argument per command-line option)
         typer.Option(
             "--model",
             "-m",
-            help="Model to score as NAME=CHECKPOINT; repeat for several. The first two are compared at every offset.",
+            help="Model to score as NAME=RUN, where RUN is a run folder of holopaswin train or a HoloPASWIN "
+            "checkpoint; repeat for several. The first two are compared at every offset.",
         ),
     ],
     output: Annotated[
@@ -96,7 +97,7 @@ def sweep(  # noqa: PLR0913 (one argument per command-line option)
     \f
     Args:
         sweep_root (pathlib.Path): Folder with one hologen dataset per offset.
-        model (list[str]): NAME=CHECKPOINT specifications.
+        model (list[str]): NAME=RUN specifications.
         output (pathlib.Path): Folder for the results.
         batch_size (int): Holograms per forward pass.
         train_error (float): Half-width of the training distance range in um.
@@ -107,13 +108,14 @@ def sweep(  # noqa: PLR0913 (one argument per command-line option)
         typer.Exit: With code 2 if a model specification or the sweep sets are invalid.
     """  # noqa: D301 (typer hides the text after the form feed from --help)
     # Imported here so that `holopaswin --help` stays fast.
-    from holopaswin.evaluation.sweep import parse_model_specs, run_sweep, write_results  # noqa: PLC0415
+    from holopaswin.evaluation.scoring import parse_model_specs  # noqa: PLC0415
+    from holopaswin.evaluation.sweep import run_sweep, write_results  # noqa: PLC0415
 
     try:
-        checkpoints: dict[str, pathlib.Path] = parse_model_specs(model)
-        table: pd.DataFrame = run_sweep(sweep_root, checkpoints, select_device(device), batch_size, limit)
-    except ValueError as error:
+        runs: dict[str, pathlib.Path] = parse_model_specs(model)
+        table: pd.DataFrame = run_sweep(sweep_root, runs, select_device(device), batch_size, limit)
+    except (ValueError, FileNotFoundError) as error:
         typer.echo(f"Error: {error}", err=True)
         raise typer.Exit(code=2) from error
-    metrics: list[str] = write_results(table, list(checkpoints), train_error, output)
+    metrics: list[str] = write_results(table, list(runs), train_error, output)
     typer.echo(f"Scored {len(table)} reconstructions with {', '.join(metrics)}; results in {output}")

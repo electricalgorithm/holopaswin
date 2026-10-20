@@ -8,12 +8,14 @@ holopaswin evaluate TEST_DIR [--model NAME=RUN] [--baseline NAME] [OPTIONS]
     score networks and classical baselines on a test set
 holopaswin figure TEST_DIR --samples 0,5 [--model NAME=RUN] [--baseline NAME] [OPTIONS]
     draw the reconstructions of some test holograms side by side
+holopaswin benchmark (--model RUN | --architecture NAME --data DIR) [OPTIONS]
+    time the network alone and the whole path from a stored hologram
 holopaswin sweep SWEEP_ROOT --model NAME=RUN [OPTIONS]
     score models on test sets recorded at a wrong distance
 """
 
 import pathlib
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, Any
 
 import typer
 
@@ -328,6 +330,81 @@ def figure(  # noqa: PLR0913 (one argument per command-line option)
         typer.echo(f"Error: {problem}", err=True)
         raise typer.Exit(code=2) from problem
     typer.echo(f"Figure saved to {output}")
+
+
+@app.command()
+def benchmark(  # noqa: PLR0913 (one argument per command-line option)
+    model: Annotated[
+        pathlib.Path | None,
+        typer.Option("--model", "-m", help="Run folder of holopaswin train, or a HoloPASWIN checkpoint with --data."),
+    ] = None,
+    architecture: Annotated[
+        str | None,
+        typer.Option(help="Time an untrained network instead: holopaswin, unet, resnet_unet or hrnet. Needs --data."),
+    ] = None,
+    data: Annotated[
+        pathlib.Path | None,
+        typer.Option(
+            help="hologen dataset; gives the geometry and adds the end-to-end timing from stored holograms.",
+            exists=True,
+            file_okay=False,
+        ),
+    ] = None,
+    batch_size: Annotated[
+        list[int] | None, typer.Option("--batch-size", help="Batch size to time; repeat for several. (default: 1)")
+    ] = None,
+    iterations: Annotated[int, typer.Option(help="Timed passes per batch size.", min=1)] = 100,
+    warmup: Annotated[int, typer.Option(help="Untimed passes before timing.", min=0)] = 10,
+    output: Annotated[pathlib.Path, typer.Option("--output", "-o", help="JSON file for the timings.")] = pathlib.Path(
+        "benchmark.json"
+    ),
+    device: Annotated[
+        str | None,
+        typer.Option(help="Torch device, e.g. cpu or cuda. (default: CUDA, then MPS, then CPU)"),
+    ] = None,
+) -> None:
+    """Time the network alone and the whole path from a stored hologram.
+
+    The network is timed per batch size with the device synchronised, after a
+    warm-up. With --data, reading, normalising and reconstructing stored
+    holograms one by one is timed too.
+
+    \f
+    Args:
+        model (pathlib.Path | None): Run folder or checkpoint, or None.
+        architecture (str | None): Untrained network to time, or None.
+        data (pathlib.Path | None): Dataset for the geometry and end-to-end timing.
+        batch_size (list[int] | None): Batch sizes, or None for 1.
+        iterations (int): Timed passes per batch size.
+        warmup (int): Untimed passes.
+        output (pathlib.Path): JSON file.
+        device (str | None): Torch device name, or None to choose one.
+
+    Raises:
+        typer.Exit: With code 2 if the model or its geometry cannot be determined.
+    """  # noqa: D301 (typer hides the text after the form feed from --help)
+    import json  # noqa: PLC0415
+
+    from holopaswin.evaluation.benchmark import run_benchmark  # noqa: PLC0415
+
+    try:
+        report: dict[str, Any] = run_benchmark(
+            model, architecture, data, batch_size or [1], iterations, warmup, select_device(device)
+        )
+    except (ValueError, FileNotFoundError) as error:
+        typer.echo(f"Error: {error}", err=True)
+        raise typer.Exit(code=2) from error
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(report, indent=2))
+    row: dict[str, float]
+    for row in report["model"]:
+        typer.echo(
+            f"batch {int(row['batch_size'])}: latency {row['latency_ms']:.1f} ms, "
+            f"{row['holograms_per_second']:.1f} holograms/s"
+        )
+    if "end_to_end" in report:
+        typer.echo(f"end to end: {report['end_to_end']['total_ms']:.1f} ms per hologram")
+    typer.echo(f"Timings saved to {output}")
 
 
 @app.command()

@@ -265,6 +265,47 @@ def test_figure_rejects_samples_outside_the_set(tmp_path: pathlib.Path) -> None:
     assert "sample 9" in result.output
 
 
+def test_benchmark_times_the_model_and_the_end_to_end_path(tmp_path: pathlib.Path) -> None:
+    """Every batch size gets a positive latency and throughput, and --data adds the full path."""
+    write_dataset(tmp_path / "data")
+    output: pathlib.Path = tmp_path / "benchmark.json"
+    result: Result = runner.invoke(
+        app,
+        [
+            "benchmark",
+            "--architecture",
+            "unet",
+            "--data",
+            str(tmp_path / "data"),
+            "--batch-size",
+            "1",
+            "--batch-size",
+            "2",
+            "--iterations",
+            "2",
+            "--warmup",
+            "1",
+            "-o",
+            str(output),
+            "--device",
+            "cpu",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    report: dict = json.loads(output.read_text())
+    assert [row["batch_size"] for row in report["model"]] == [1, 2]
+    assert all(row["latency_ms"] > 0 and row["holograms_per_second"] > 0 for row in report["model"])
+    assert set(report["end_to_end"]) == {"holograms", "load_ms", "model_ms", "total_ms"}
+    assert "latency" in result.output
+
+
+def test_benchmark_needs_a_geometry(tmp_path: pathlib.Path) -> None:
+    """Without a run folder or --data there is no geometry to build the model for."""
+    result: Result = runner.invoke(app, ["benchmark", "--architecture", "unet", "-o", str(tmp_path / "b.json")])
+    assert result.exit_code == 2
+    assert "--data" in result.output
+
+
 def test_an_interrupted_training_exits_with_130(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Ctrl-C ends the command with the conventional exit code and keeps the weights."""
 

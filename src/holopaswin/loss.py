@@ -13,12 +13,30 @@ compared. A correct prediction then matches the input whatever the absorption,
 and no blank reference frame is needed.
 """
 
+import dataclasses
 from typing import TYPE_CHECKING
 
 import torch
 
 if TYPE_CHECKING:
     from holopaswin.propagator import AngularSpectrumPropagator
+
+
+LAMBDA_PHYSICS: float = 0.1  # weight of the physics term in every published model
+
+
+@dataclasses.dataclass(frozen=True)
+class LossWeights:
+    """Weights of the supervised terms of the physics loss.
+
+    The defaults are the balance used for every published HoloPASWIN model, with
+    the amplitude as the main driver.
+    """
+
+    complex: float = 0.2  # L1 on the real and imaginary parts, a numerical stabiliser
+    amplitude: float = 0.4  # L1 on the amplitude, the main driver
+    phase: float = 0.2  # L1 on the phase, a structural guide
+    frequency: float = 0.2  # L1 on log spectra of amplitude and phase, for sharp edges
 
 
 class PhysicsLoss(torch.nn.Module):
@@ -33,12 +51,26 @@ class PhysicsLoss(torch.nn.Module):
     The total loss is: L = L_structural + lambda_physics * L_physics
     """
 
-    def __init__(self, propagator: "AngularSpectrumPropagator", lambda_physics: float = 0.1) -> None:
-        """Initialize the physics loss function."""
+    def __init__(
+        self,
+        propagator: "AngularSpectrumPropagator",
+        lambda_physics: float = LAMBDA_PHYSICS,
+        weights: LossWeights | None = None,
+    ) -> None:
+        """Initialize the physics loss function.
+
+        Args:
+            propagator (AngularSpectrumPropagator): Propagator of the model, used
+                for the physics term.
+            lambda_physics (float): Weight of the physics term.
+            weights (LossWeights | None): Weights of the supervised terms, or None
+                for the defaults.
+        """
         super().__init__()
         self.propagator = propagator
         self.l1 = torch.nn.L1Loss()
         self.lambda_p = lambda_physics
+        self.weights: LossWeights = LossWeights() if weights is None else weights
 
     def compute_freq_loss(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         """Compute L1 loss in the frequency domain (Spectral Loss)."""
@@ -126,12 +158,13 @@ class PhysicsLoss(torch.nn.Module):
         pred_hologram = torch.abs(pred_field_holo) ** 2
         loss_phy = self.scale_invariant_physics_loss(pred_hologram, input_hologram)
 
-        # Total Loss Combination
-        # New Balanced Strategy:
-        # - Amp (0.4): Still the main driver.
-        # - Phase (0.2): Structural guide.
-        # - Freq (0.2): Edge/Sharpness enforcer.
-        # - Complex (0.2): Numerical stabilizer.
-        loss_supervised = (0.2 * loss_complex) + (0.4 * loss_amp) + (0.2 * loss_phase) + (0.2 * loss_freq)
+        # Total loss, with the supervised terms weighted as in LossWeights.
+        weights: LossWeights = self.weights
+        loss_supervised = (
+            (weights.complex * loss_complex)
+            + (weights.amplitude * loss_amp)
+            + (weights.phase * loss_phase)
+            + (weights.frequency * loss_freq)
+        )
 
         return loss_supervised + (self.lambda_p * loss_phy)  # type: ignore[no-any-return]

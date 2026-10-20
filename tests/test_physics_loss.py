@@ -10,7 +10,7 @@ import numpy.typing as npt
 import pytest
 import torch
 
-from holopaswin.loss import PhysicsLoss
+from holopaswin.loss import LossWeights, PhysicsLoss
 from holopaswin.propagator import AngularSpectrumPropagator
 
 SIZE = 224
@@ -190,3 +190,47 @@ def test_pupil_removes_the_penalty_for_fine_rims() -> None:
 
     assert float(matched) < 1e-5
     assert float(mismatched) > 0.02  # about 8% of the background for these sharp rims
+
+
+def test_default_weights_are_the_published_balance() -> None:
+    """The default loss is 0.2 complex + 0.4 amplitude + 0.2 phase + 0.2 frequency + 0.1 physics."""
+    propagator: AngularSpectrumPropagator = AngularSpectrumPropagator((SIZE, SIZE), 532e-9, 0.24e-6, 20e-6, 0.45)
+    torch.manual_seed(0)
+    prediction: torch.Tensor = torch.rand(2, 2, SIZE, SIZE)
+    target: torch.Tensor = torch.rand(2, 2, SIZE, SIZE)
+    hologram: torch.Tensor = torch.rand(2, 1, SIZE, SIZE) + 0.5
+    criterion: PhysicsLoss = PhysicsLoss(propagator)
+    predicted: torch.Tensor = torch.complex(prediction[:, 0:1], prediction[:, 1:2])
+    true: torch.Tensor = torch.complex(target[:, 0:1], target[:, 1:2])
+    l1 = torch.nn.functional.l1_loss
+    complex_term: torch.Tensor = l1(prediction, target)
+    amplitude_term: torch.Tensor = l1(predicted.abs(), true.abs())
+    phase_term: torch.Tensor = l1(predicted.angle(), true.angle())
+    frequency_term: torch.Tensor = (
+        criterion.compute_freq_loss(predicted.abs(), true.abs())
+        + criterion.compute_freq_loss(predicted.angle(), true.angle())
+    ) / 2
+    physics_term: torch.Tensor = criterion.scale_invariant_physics_loss(
+        propagator(predicted, backward=False).abs() ** 2, hologram
+    )
+    expected: torch.Tensor = (
+        0.2 * complex_term + 0.4 * amplitude_term + 0.2 * phase_term + 0.2 * frequency_term + 0.1 * physics_term
+    )
+    torch.testing.assert_close(criterion(prediction, target, hologram), expected)
+
+
+def test_a_single_weight_isolates_its_term() -> None:
+    """With only the amplitude weight set, the loss is the amplitude L1."""
+    propagator: AngularSpectrumPropagator = AngularSpectrumPropagator((SIZE, SIZE), 532e-9, 0.24e-6, 20e-6, 0.45)
+    torch.manual_seed(1)
+    prediction: torch.Tensor = torch.rand(1, 2, SIZE, SIZE)
+    target: torch.Tensor = torch.rand(1, 2, SIZE, SIZE)
+    hologram: torch.Tensor = torch.rand(1, 1, SIZE, SIZE) + 0.5
+    only_amplitude: LossWeights = LossWeights(complex=0.0, amplitude=1.0, phase=0.0, frequency=0.0)
+    loss: torch.Tensor = PhysicsLoss(propagator, lambda_physics=0.0, weights=only_amplitude)(
+        prediction, target, hologram
+    )
+    amplitude_l1: torch.Tensor = torch.nn.functional.l1_loss(
+        torch.complex(prediction[:, 0], prediction[:, 1]).abs(), torch.complex(target[:, 0], target[:, 1]).abs()
+    )
+    torch.testing.assert_close(loss, amplitude_l1)

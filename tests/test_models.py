@@ -1,6 +1,7 @@
 """Tests that every network and baseline uses the same physics."""
 
 import pytest
+import torch
 from torch import nn
 
 from holopaswin.baselines.gerchberg_saxton import GerchbergSaxton
@@ -33,3 +34,17 @@ def test_the_objective_pupil_reaches_every_propagator(cls: type[nn.Module]) -> N
     """Without an NA there is no pupil; with one, the propagator applies it."""
     assert construct(cls, None).propagator.pupil is None
     assert construct(cls, 0.45).propagator.pupil is not None
+
+
+@pytest.mark.parametrize("cls", [UNetBaseline, ResNetUNet, HRNet, HoloPASWIN], ids=lambda cls: cls.__name__)
+def test_every_network_back_propagates_the_same_field(cls: type[nn.Module]) -> None:
+    """All networks start from sqrt(I) back-propagated with zero phase."""
+    torch.manual_seed(0)
+    hologram: torch.Tensor = torch.rand(1, 1, SIZE, SIZE) + 0.5
+    module: nn.Module = construct(cls, 0.45).eval()
+    amplitude: torch.Tensor = torch.complex(torch.sqrt(hologram + 1e-8), torch.zeros_like(hologram))
+    expected_field: torch.Tensor = module.propagator(amplitude, backward=True)
+    expected: torch.Tensor = torch.cat([expected_field.real, expected_field.imag], dim=1)
+    with torch.no_grad():
+        _, dirty = module(hologram)
+    torch.testing.assert_close(dirty, expected, atol=1e-5, rtol=1e-5)

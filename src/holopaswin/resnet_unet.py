@@ -99,8 +99,10 @@ class ResNetUNet(nn.Module):
         Returns:
             Tuple of (clean_complex, dirty_complex) both as (B, 2, H, W)
         """
-        # ASM back-propagation
-        dirty_complex = self.propagator(hologram, backward=True)
+        # ASM back-propagation of the amplitude sqrt(I) with zero phase, as in the
+        # other networks.
+        amplitude = torch.complex(torch.sqrt(hologram + 1e-8), torch.zeros_like(hologram))
+        dirty_complex = self.propagator(amplitude, backward=True)
         dirty_2ch = torch.cat([dirty_complex.real, dirty_complex.imag], dim=1)
 
         # Encoder

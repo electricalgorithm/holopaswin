@@ -1,5 +1,6 @@
 # Test set at a quarter of the calibrated exposures, so twice the relative shot
-# noise. Same seeds and groups as test.toml; its ideal groups equal the test set.
+# noise. Same seeds and groups as test.toml; its ideal holograms are the test
+# set's at a quarter of the counts, so they equal them after normalisation up to rounding.
 [dataset]
 total_samples = 1000
 seed = 200000

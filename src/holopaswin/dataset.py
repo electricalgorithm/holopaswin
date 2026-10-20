@@ -6,6 +6,7 @@ holographic data from Parquet files containing object (Real/Imag) and hologram (
 
 import tomllib
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd  # type: ignore[import-untyped]
@@ -191,6 +192,39 @@ class HoloDataset(Dataset[tuple[torch.Tensor, ...]]):
         """Return the number of samples in the dataset."""
         return self.total_samples
 
+    def _locate(self, idx: int) -> tuple[dict[str, Any], int]:
+        """Find the file and the first row of a sample.
+
+        Args:
+            idx: Global index of the sample.
+
+        Returns:
+            The index entry of the sample's file and the row where the sample
+            starts; each sample is img_dim * img_dim consecutive rows.
+        """
+        file_idx: int = int(np.searchsorted(self.cumulative_counts, idx, side="right"))
+        local_idx: int = int(idx if file_idx == 0 else idx - self.cumulative_counts[file_idx - 1])
+        return self.samples_index[file_idx], local_idx * self.rows_per_sample
+
+    def read_recorded(self, idx: int) -> np.ndarray:
+        """Read one hologram as recorded, in digital numbers of the camera.
+
+        Args:
+            idx: Global index of the sample.
+
+        Returns:
+            The hologram before normalisation, shape (img_dim, img_dim), float32.
+        """
+        file_info: dict[str, Any]
+        row_start: int
+        file_info, row_start = self._locate(idx)
+        # read_table reads the whole column of the file before slicing; simple, and
+        # fine for the small batch sizes used here.
+        htable = pq.read_table(file_info["holo_path"], columns=["intensity"])
+        h_flat = htable.slice(offset=row_start, length=self.rows_per_sample)["intensity"].to_numpy()
+        recorded: np.ndarray = h_flat.reshape(self.img_dim, self.img_dim).astype(np.float32)
+        return recorded
+
     def __getitem__(self, idx: int) -> tuple[torch.Tensor, ...]:
         """Get a single data sample from the dataset.
 
@@ -204,29 +238,10 @@ class HoloDataset(Dataset[tuple[torch.Tensor, ...]]):
                 - z_true: Recording distance in meters, a float32 scalar tensor,
                   only when the dataset was made with return_z.
         """
-        # Find which file contains this index
-        file_idx = np.searchsorted(self.cumulative_counts, idx, side="right")
-
-        local_idx = idx if file_idx == 0 else idx - self.cumulative_counts[file_idx - 1]
-
-        file_info = self.samples_index[file_idx]
-
-        # Calculate row offset
-        # Each image is img_dim*img_dim consecutive rows
-        row_start = local_idx * self.rows_per_sample
-
-        # Load Hologram (Intensity)
-        # We read the table with specific columns.
-        # Note: 'read_table' might read the full column into memory then slice.
-        # This is memory intensive but simple.
-        # Given batch size is small, it might pass.
-        htable = pq.read_table(file_info["holo_path"], columns=["intensity"])
-        h_slice = htable.slice(offset=row_start, length=self.rows_per_sample)
-
-        # Convert to numpy and reshape
-        # Note: .to_numpy() on a ChunkedArray (from slice) is efficient
-        h_flat = h_slice["intensity"].to_numpy()  # (262144,)
-        h_np = h_flat.reshape(self.img_dim, self.img_dim).astype(np.float32)
+        file_info: dict[str, Any]
+        row_start: int
+        file_info, row_start = self._locate(idx)
+        h_np: np.ndarray = self.read_recorded(idx)
 
         # Load Ground Truth (Real, Imag)
         gtable = pq.read_table(file_info["gt_path"], columns=["real", "imag"])

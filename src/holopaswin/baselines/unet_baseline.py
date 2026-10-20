@@ -29,6 +29,7 @@ class UNetBaseline(nn.Module):
         z_distance: float,
         base_channels: int = 64,
         residual_mode: bool = True,
+        numerical_aperture: float | None = None,
     ) -> None:
         """Initialize U-Net baseline.
 
@@ -39,6 +40,8 @@ class UNetBaseline(nn.Module):
             z_distance: Propagation distance in meters (e.g., 0.02).
             base_channels: Number of channels in first encoder layer.
             residual_mode: If True, predict correction; if False, predict clean directly.
+            numerical_aperture: NA of the imaging objective of a magnified setup, applied in
+                forward propagation, or None for a lensless setup without a pupil.
         """
         super().__init__()
         self.img_size = img_size
@@ -50,6 +53,7 @@ class UNetBaseline(nn.Module):
             wavelength,
             pixel_size,
             z_distance,
+            numerical_aperture=numerical_aperture,
         )
 
         # Channel progression: 64 -> 128 -> 256 -> 512

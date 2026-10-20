@@ -37,6 +37,7 @@ class GerchbergSaxton(nn.Module):
         z_distance: float,
         iterations: int = 100,
         support_threshold: float = 0.5,
+        numerical_aperture: float | None = None,
     ) -> None:
         """Initialize the GS algorithm.
 
@@ -48,6 +49,8 @@ class GerchbergSaxton(nn.Module):
             iterations: Number of GS iterations to run.
             support_threshold: Threshold for support constraint (0-1).
                 Pixels with amplitude < threshold * max are constrained.
+            numerical_aperture: NA of the imaging objective of a magnified setup, applied in
+                forward propagation, or None for a lensless setup without a pupil.
         """
         super().__init__()
         self.iterations = iterations
@@ -59,6 +62,7 @@ class GerchbergSaxton(nn.Module):
             wavelength,
             pixel_size,
             z_distance,
+            numerical_aperture=numerical_aperture,
         )
 
     def forward(self, hologram: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:

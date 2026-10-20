@@ -13,13 +13,14 @@ from holopaswin.propagator import AngularSpectrumPropagator
 class ResNetUNet(nn.Module):
     """U-Net with ResNet-18 encoder for holographic reconstruction."""
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         img_size: int,
         wavelength: float,
         pixel_size: float,
         z_distance: float,
         residual_mode: bool = True,
+        numerical_aperture: float | None = None,
     ) -> None:
         """Initialize ResNet U-Net.
 
@@ -29,6 +30,8 @@ class ResNetUNet(nn.Module):
             pixel_size: Pixel pitch in meters
             z_distance: Propagation distance in meters
             residual_mode: If True, predict correction; if False, predict clean field directly
+            numerical_aperture: NA of the imaging objective of a magnified setup, applied in
+                forward propagation, or None for a lensless setup without a pupil.
         """
         super().__init__()
         self.img_size = img_size
@@ -40,6 +43,7 @@ class ResNetUNet(nn.Module):
             wavelength,
             pixel_size,
             z_distance,
+            numerical_aperture=numerical_aperture,
         )
 
         # ResNet-18 encoder (pretrained on ImageNet)

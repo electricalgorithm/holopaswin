@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 import torch
+from holo_fixtures import write_images
 
 from holopaswin.dataset import HoloDataset
 
@@ -14,7 +15,7 @@ COUNT: int = 3
 
 
 def write_dataset(folder: pathlib.Path, z_true: list[float] | None, nominal: float = 20.0) -> None:
-    """Write a tiny dataset in the hologen file layout.
+    """Write a tiny dataset in the hologen file format.
 
     Args:
         folder (pathlib.Path): Folder for the files.
@@ -23,11 +24,7 @@ def write_dataset(folder: pathlib.Path, z_true: list[float] | None, nominal: flo
         nominal (float): Nominal distance in um, written to recipe.toml.
     """
     folder.mkdir(parents=True, exist_ok=True)
-    pixels: int = SIZE * SIZE
-    pd.DataFrame({"intensity": np.full(COUNT * pixels, 1000.0)}).to_parquet(folder / "hologram_0000.parquet")
-    pd.DataFrame({"real": np.ones(COUNT * pixels), "imag": np.zeros(COUNT * pixels)}).to_parquet(
-        folder / "ground_truth_0000.parquet"
-    )
+    write_images(folder, np.full((COUNT, SIZE, SIZE), 1000.0), np.ones((COUNT, SIZE, SIZE), dtype=complex))
     metadata: dict[str, list] = {"object_family": ["red_blood_cells"] * COUNT}
     if z_true is not None:
         metadata["z_true"] = z_true
@@ -107,3 +104,18 @@ def test_metadata_columns_missing_from_old_datasets_are_empty(tmp_path: pathlib.
     )
     assert labels["object_family"].tolist() == ["red_blood_cells"] * COUNT
     assert labels["z_true"].isna().all()
+
+
+def test_the_old_per_pixel_layout_is_rejected(tmp_path: pathlib.Path) -> None:
+    """Datasets written before hologen format 2 give a message to regenerate them."""
+    write_dataset(tmp_path, [20.0] * COUNT)
+    pd.DataFrame({"intensity": np.full(COUNT * SIZE * SIZE, 1000.0)}).to_parquet(tmp_path / "hologram_0000.parquet")
+    with pytest.raises(ValueError, match="regenerate"):
+        HoloDataset(str(tmp_path), target_size=SIZE, img_dim=SIZE)
+
+
+def test_an_image_size_other_than_the_stored_one_is_rejected(tmp_path: pathlib.Path) -> None:
+    """img_dim must match the shape stored in the files."""
+    write_dataset(tmp_path, [20.0] * COUNT)
+    with pytest.raises(ValueError, match="8 x 8"):
+        HoloDataset(str(tmp_path), target_size=4, img_dim=16)

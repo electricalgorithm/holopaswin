@@ -18,6 +18,7 @@ from torchvision import transforms
 from holopaswin.normalization import normalize_hologram
 
 MICROMETER: float = 1e-6  # hologen stores distances in um
+HOLOGEN_FORMAT: bytes = b"2"  # value of hologen.format in the image files this module reads
 
 
 def read_recipe_geometry(data_dir: Path) -> dict[str, float]:
@@ -72,7 +73,8 @@ class HoloDataset(Dataset[tuple[torch.Tensor, ...]]):
     - Hologram: Intensity (1 channel)
     - Object: Real + Imag parts (2 channels)
 
-    The dataset assumes the directory structure from `inline-digital-holography-v2`.
+    The folder is a dataset written by hologen in format 2, one hologram per row
+    and row group, so each item reads only its own hologram and ground truth.
     With return_z, each item also carries the distance at which its hologram was
     recorded, for the physics loss of z-augmented training.
     """
@@ -81,10 +83,10 @@ class HoloDataset(Dataset[tuple[torch.Tensor, ...]]):
         """Initialize the dataset.
 
         Args:
-            data_dir: Path to folder with .parquet files (hologen/inline-digital-holography-v2).
-            target_size: The spatial dimension to resize images to (e.g., 224).
+            data_dir: Path to a dataset folder written by hologen.
+            target_size: Size of the central crop returned for each item (e.g., 224).
                         Defaults to 224.
-            img_dim: The original dimension of the images in the parquet files.
+            img_dim: Size of the stored images, checked against the files.
                      Defaults to 512.
             return_z: If True, items are (hologram, object, z_true), where z_true is
                 the recording distance in meters from the metadata column z_true.
@@ -96,37 +98,23 @@ class HoloDataset(Dataset[tuple[torch.Tensor, ...]]):
         self.img_dim = img_dim
         self.return_z = return_z
 
-        # Find all hologram files
         self.holo_files = sorted(self.data_dir.glob("hologram_*.parquet"))
-
         print(f"Found {len(self.holo_files)} hologram parquet files.")
-
-        # Pixels per image (img_dim x img_dim)
-        # We hardcode this because the dataset structure (1 pixel per row) implies it.
-        # If it changes, this breaks, but we verified it's 262144 rows per image for 512x512.
-        self.rows_per_sample = self.img_dim * self.img_dim
-
-        self.samples_index = []
-
-        print("Indexing dataset...")
+        self.samples_index: list[dict[str, Any]] = []
+        h_path: Path
         for h_path in self.holo_files:
-            gt_path = h_path.parent / h_path.name.replace("hologram", "ground_truth")
+            gt_path: Path = h_path.parent / h_path.name.replace("hologram", "ground_truth")
             if not gt_path.exists():
                 continue
-
-            # Use pyarrow to get metadata
-            pf = pq.ParquetFile(h_path)
-            num_rows = pf.metadata.num_rows
-
-            # Calculate number of images in this file
-            num_samples = num_rows // self.rows_per_sample
-
+            hologram_file: pq.ParquetFile
+            shape: tuple[int, int]
+            hologram_file, shape = self._open_image_file(h_path)
+            self._open_image_file(gt_path)
+            if shape != (self.img_dim, self.img_dim):
+                msg: str = f"{h_path} holds {shape[0]} x {shape[1]} images, not {self.img_dim} x {self.img_dim}."
+                raise ValueError(msg)
             self.samples_index.append(
-                {
-                    "holo_path": str(h_path),
-                    "gt_path": str(gt_path),
-                    "count": num_samples,
-                }
+                {"holo_path": str(h_path), "gt_path": str(gt_path), "count": hologram_file.metadata.num_rows}
             )
 
         self.z_true: np.ndarray | None = self._read_distances() if return_z else None
@@ -192,19 +180,64 @@ class HoloDataset(Dataset[tuple[torch.Tensor, ...]]):
         """Return the number of samples in the dataset."""
         return self.total_samples
 
+    @staticmethod
+    def _open_image_file(path: Path) -> tuple[pq.ParquetFile, tuple[int, int]]:
+        """Open an image file written by hologen and check its format.
+
+        hologen format 2 stores one hologram per row, and per row group, with the
+        images as 2-D lists; the Parquet metadata names the format and the shape.
+
+        Args:
+            path (Path): hologram_XXXX.parquet or ground_truth_XXXX.parquet file.
+
+        Returns:
+            tuple[pq.ParquetFile, tuple[int, int]]: The open file and the image shape.
+
+        Raises:
+            ValueError: If the file was written before hologen format 2.
+        """
+        file: pq.ParquetFile = pq.ParquetFile(path)
+        metadata: dict[bytes, bytes] = file.schema_arrow.metadata or {}
+        if metadata.get(b"hologen.format") != HOLOGEN_FORMAT:
+            msg: str = (
+                f"{path} was written before hologen format 2 (one pixel per row); regenerate the dataset "
+                "with the current hologen."
+            )
+            raise ValueError(msg)
+        height: str
+        width: str
+        height, width = metadata[b"hologen.shape"].decode().split(",")
+        return file, (int(height), int(width))
+
+    @staticmethod
+    def _read_image(file: pq.ParquetFile, row: int, column: str, shape: tuple[int, int]) -> np.ndarray:
+        """Read one image of one hologram, reading only that hologram's row group.
+
+        Args:
+            file (pq.ParquetFile): An open format 2 file.
+            row (int): Row, and row group, of the hologram in the file.
+            column (str): Column to read, e.g. intensity or real.
+            shape (tuple[int, int]): Image shape.
+
+        Returns:
+            np.ndarray: The image as float32, shape (H, W).
+        """
+        images = file.read_row_group(row, columns=[column]).column(column).combine_chunks()
+        image: np.ndarray = images.flatten().flatten().to_numpy(zero_copy_only=False).reshape(shape).astype(np.float32)
+        return image
+
     def _locate(self, idx: int) -> tuple[dict[str, Any], int]:
-        """Find the file and the first row of a sample.
+        """Find the file and the row of a sample.
 
         Args:
             idx: Global index of the sample.
 
         Returns:
-            The index entry of the sample's file and the row where the sample
-            starts; each sample is img_dim * img_dim consecutive rows.
+            The index entry of the sample's file and the sample's row in it.
         """
         file_idx: int = int(np.searchsorted(self.cumulative_counts, idx, side="right"))
         local_idx: int = int(idx if file_idx == 0 else idx - self.cumulative_counts[file_idx - 1])
-        return self.samples_index[file_idx], local_idx * self.rows_per_sample
+        return self.samples_index[file_idx], local_idx
 
     def read_recorded(self, idx: int) -> np.ndarray:
         """Read one hologram as recorded, in digital numbers of the camera.
@@ -216,13 +249,12 @@ class HoloDataset(Dataset[tuple[torch.Tensor, ...]]):
             The hologram before normalisation, shape (img_dim, img_dim), float32.
         """
         file_info: dict[str, Any]
-        row_start: int
-        file_info, row_start = self._locate(idx)
-        # read_table reads the whole column of the file before slicing; simple, and
-        # fine for the small batch sizes used here.
-        htable = pq.read_table(file_info["holo_path"], columns=["intensity"])
-        h_flat = htable.slice(offset=row_start, length=self.rows_per_sample)["intensity"].to_numpy()
-        recorded: np.ndarray = h_flat.reshape(self.img_dim, self.img_dim).astype(np.float32)
+        row: int
+        file_info, row = self._locate(idx)
+        file: pq.ParquetFile
+        shape: tuple[int, int]
+        file, shape = self._open_image_file(Path(file_info["holo_path"]))
+        recorded: np.ndarray = self._read_image(file, row, "intensity", shape)
         return recorded
 
     def __getitem__(self, idx: int) -> tuple[torch.Tensor, ...]:
@@ -239,16 +271,16 @@ class HoloDataset(Dataset[tuple[torch.Tensor, ...]]):
                   only when the dataset was made with return_z.
         """
         file_info: dict[str, Any]
-        row_start: int
-        file_info, row_start = self._locate(idx)
+        row: int
+        file_info, row = self._locate(idx)
         h_np: np.ndarray = self.read_recorded(idx)
 
-        # Load Ground Truth (Real, Imag)
-        gtable = pq.read_table(file_info["gt_path"], columns=["real", "imag"])
-        g_slice = gtable.slice(offset=row_start, length=self.rows_per_sample)
-
-        r_np = g_slice["real"].to_numpy().reshape(self.img_dim, self.img_dim).astype(np.float32)
-        i_np = g_slice["imag"].to_numpy().reshape(self.img_dim, self.img_dim).astype(np.float32)
+        # Ground truth, from the same row of the ground-truth file.
+        truth_file: pq.ParquetFile
+        shape: tuple[int, int]
+        truth_file, shape = self._open_image_file(Path(file_info["gt_path"]))
+        r_np: np.ndarray = self._read_image(truth_file, row, "real", shape)
+        i_np: np.ndarray = self._read_image(truth_file, row, "imag", shape)
 
         # Convert the camera's digital numbers to intensity relative to the
         # illumination (background = 1), as used by the physics model and L_phy.

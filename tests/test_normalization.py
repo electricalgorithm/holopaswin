@@ -10,9 +10,9 @@ from pathlib import Path
 
 import numpy as np
 import numpy.typing as npt
-import pandas as pd
 import pytest
 import torch
+from holo_fixtures import write_images
 
 from holopaswin.dataset import HoloDataset
 from holopaswin.normalization import normalize_hologram
@@ -133,27 +133,16 @@ def test_fixed_divisor_breaks_the_asm_scale() -> None:
     assert np.mean(np.abs(legacy - hologram)) > 0.4
 
 
-# Integration: HoloDataset reads hologen's parquet layout --------------------
-
-
-def write_hologen_parquet(directory: Path, holograms: list[npt.NDArray[np.float64]]) -> None:
-    """Write holograms and empty-field ground truths in hologen's parquet layout."""
-    pixels = holograms[0].size
-    ids = np.repeat(np.arange(len(holograms)), pixels)
-    pd.DataFrame({"sample_id": ids, "intensity": np.concatenate([h.ravel() for h in holograms])}).to_parquet(
-        directory / "hologram_0000.parquet"
-    )
-    ones = np.ones(pixels * len(holograms))
-    pd.DataFrame({"sample_id": ids, "real": ones, "imag": 0.0 * ones}).to_parquet(
-        directory / "ground_truth_0000.parquet"
-    )
+# Integration: HoloDataset reads hologen's file format ----------------------
 
 
 def test_dataset_returns_normalised_holograms(tmp_path: Path) -> None:
     """Holograms recorded at different exposures all come out with background 1."""
     hologram, _ = ideal_hologram()
     recorded = record(hologram)
-    write_hologen_parquet(tmp_path, [recorded, 0.25 * recorded])
+    # Whole camera counts, as hologen stores them; the second at twice the exposure.
+    counts: npt.NDArray[np.float64] = np.stack([recorded, 2 * recorded])
+    write_images(tmp_path, counts, np.ones(counts.shape, dtype=complex))
 
     dataset = HoloDataset(str(tmp_path), target_size=SIZE, img_dim=SIZE)
     first, _ = dataset[0]

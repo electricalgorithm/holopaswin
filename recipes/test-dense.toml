@@ -1,10 +1,15 @@
-# Test set with crowded fields: twice the adherent coverage and three times the
-# red blood cell density of training. It places other cells than test.toml, so
-# it has its own seeds.
+# Test set with crowded fields: twice the red blood cell density of training
+# (501 instead of 251 cells, 40 % of the area) and an adherent coverage of 0.5
+# instead of 0.263. Three times the density is out of reach: random placement
+# without overlap stalls near 55 % of the area. The extra attempts let placement
+# reach these targets. It places other cells than test.toml, so it has its own
+# seeds.
 [dataset]
 total_samples = 400
 seed = 300000
 
 [objects]
+red_blood_cell_density = 0.0083  # cells per um^2
 adherent_coverage = 0.5  # fraction of the field
-red_blood_cell_density = 0.01245  # cells per um^2
+red_blood_cell_attempts = 10000
+adherent_attempts = 5000

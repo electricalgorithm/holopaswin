@@ -8,6 +8,7 @@ from torch import nn
 
 from holopaswin.baselines.gerchberg_saxton import GerchbergSaxton
 from holopaswin.baselines.hrnet import HRNet
+from holopaswin.baselines.latychevskaia_fink import LatychevskaiaFink
 from holopaswin.baselines.unet_baseline import UNetBaseline
 from holopaswin.model import HoloPASWIN
 from holopaswin.models import (
@@ -26,7 +27,7 @@ from holopaswin.training.config import ModelSettings, TrainingConfig, config_fro
 
 SIZE: int = 64
 GEOMETRY: tuple[int, float, float, float] = (SIZE, 532e-9, 0.24e-6, 20e-6)
-CLASSES: list[type[nn.Module]] = [UNetBaseline, ResNetUNet, HRNet, GerchbergSaxton, HoloPASWIN]
+CLASSES: list[type[nn.Module]] = [UNetBaseline, ResNetUNet, HRNet, GerchbergSaxton, LatychevskaiaFink, HoloPASWIN]
 
 
 def construct(cls: type[nn.Module], numerical_aperture: float | None) -> nn.Module:
@@ -86,6 +87,54 @@ def test_gerchberg_saxton_improves_on_back_propagation() -> None:
     assert (outputs[10] - outputs[0]).abs().max() > 1e-3
     assert (outputs[40] - outputs[10]).abs().max() > 1e-4
     assert (outputs[40] - truth).abs().mean() < (outputs[0] - truth).abs().mean()
+
+
+def sparse_object(size: int) -> torch.Tensor:
+    """Two weak absorbing phase disks on an empty background, as a (1, 1, size, size) field.
+
+    Args:
+        size (int): Image size in pixels.
+
+    Returns:
+        torch.Tensor: Complex transmission function, 1 away from the disks.
+    """
+    axis: torch.Tensor = torch.arange(size) - size / 2
+    first: torch.Tensor = (((axis[:, None] + 14) ** 2 + (axis[None, :] + 10) ** 2) < 6**2).float()
+    second: torch.Tensor = (((axis[:, None] - 12) ** 2 + (axis[None, :] - 16) ** 2) < 5**2).float()
+    disks: torch.Tensor = first + second
+    return ((1 - 0.1 * disks) * torch.exp(1j * 0.5 * disks))[None, None]
+
+
+def test_latychevskaia_fink_improves_on_back_propagation() -> None:
+    """LF on sparse objects moves away from ASM, depends on the iterations and gets closer to the truth."""
+    size: int = 64
+    geometry: tuple[int, float, float, float] = (size, 532e-9, 4.65e-6, 0.02)
+    truth: torch.Tensor = sparse_object(size)
+    propagator: AngularSpectrumPropagator = AngularSpectrumPropagator((size, size), *geometry[1:])
+    hologram: torch.Tensor = propagator(truth).abs() ** 2
+
+    # The outputs carry the constant phase exp(-i k z) of the back-propagation; compare without it.
+    incident: torch.Tensor = torch.conj(propagator.H[0, 0])
+    outputs: dict[int, torch.Tensor] = {}
+    for iterations in (0, 10, 40):
+        estimate, _ = LatychevskaiaFink(*geometry, iterations=iterations)(hologram)
+        outputs[iterations] = torch.complex(estimate[:, :1], estimate[:, 1:]) / incident
+
+    asm, _ = GerchbergSaxton(*geometry, iterations=0)(hologram)
+    assert (outputs[10] - torch.complex(asm[:, :1], asm[:, 1:]) / incident).abs().max() > 1e-3
+    assert (outputs[40] - outputs[10]).abs().max() > 1e-4
+    assert (outputs[40] - truth).abs().mean() < 0.5 * (outputs[0] - truth).abs().mean()
+
+
+def test_latychevskaia_fink_support_holds_the_objects() -> None:
+    """The support found in the first reconstruction covers the disks and leaves most of the field out."""
+    size: int = 64
+    lf: LatychevskaiaFink = LatychevskaiaFink(size, 532e-9, 4.65e-6, 0.02)
+    truth: torch.Tensor = sparse_object(size)
+    support: torch.Tensor = lf.find_support(lf.propagator(lf.propagator(truth), backward=True))
+    inside: torch.Tensor = (truth - 1).abs() > 1e-3
+    assert support[inside].min().item() == 1.0
+    assert (support > 0.5).float().mean().item() < 0.5
 
 
 def write_recipe(folder: pathlib.Path, size: int = SIZE) -> None:

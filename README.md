@@ -91,7 +91,7 @@ Each run folder holds the best model (`model.pth`), the state for continuing (`l
 
 ### Evaluation
 
-Score trained runs and classical baselines (`asm` for back-propagation, `gs50` and `gs100` for Gerchberg-Saxton) on a test set:
+Score trained runs and classical baselines (`asm` for back-propagation, `gs50` and `gs100` for Gerchberg-Saxton, `lf50` and `lf100` for Latychevskaia-Fink) on a test set:
 
 ```bash
 uv run holopaswin evaluate ../hologen/test --model holopaswin=runs/holopaswin --model unet=runs/unet --baseline asm --output results/main

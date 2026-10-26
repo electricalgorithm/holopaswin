@@ -17,6 +17,7 @@ from torch import nn
 
 from holopaswin.baselines.gerchberg_saxton import GerchbergSaxton
 from holopaswin.baselines.hrnet import HRNet
+from holopaswin.baselines.latychevskaia_fink import LatychevskaiaFink
 from holopaswin.baselines.unet_baseline import UNetBaseline
 from holopaswin.dataset import MICROMETER, read_recipe_geometry
 from holopaswin.model import HoloPASWIN
@@ -24,8 +25,15 @@ from holopaswin.propagator import AngularSpectrumPropagator
 from holopaswin.resnet_unet import ResNetUNet
 from holopaswin.training.config import ARCHITECTURES, ModelSettings, TrainingConfig, load_config
 
-# Classical reconstructions and the number of Gerchberg-Saxton iterations (0 is plain back-propagation).
-BASELINES: dict[str, int] = {"asm": 0, "gs50": 50, "gs100": 100}
+# Classical reconstructions: the iterative algorithm and its number of iterations, or None for plain
+# back-propagation.
+BASELINES: dict[str, tuple[type[GerchbergSaxton | LatychevskaiaFink] | None, int]] = {
+    "asm": (None, 0),
+    "gs50": (GerchbergSaxton, 50),
+    "gs100": (GerchbergSaxton, 100),
+    "lf50": (LatychevskaiaFink, 50),
+    "lf100": (LatychevskaiaFink, 100),
+}
 
 __all__ = [
     "ARCHITECTURES",
@@ -187,7 +195,8 @@ def build_baseline(name: str, geometry: Geometry) -> nn.Module:
 
     Args:
         name (str): One of BASELINES: asm (back-propagation only), gs50 or gs100
-            (Gerchberg-Saxton with that many iterations).
+            (Gerchberg-Saxton), lf50 or lf100 (Latychevskaia-Fink), the
+            iterative ones with that many iterations.
         geometry (Geometry): Geometry of the dataset.
 
     Returns:
@@ -201,8 +210,11 @@ def build_baseline(name: str, geometry: Geometry) -> nn.Module:
         msg: str = f"Unknown baseline {name!r}; choose from {', '.join(BASELINES)}."
         raise ValueError(msg)
     size: int = geometry.resolution
+    algorithm: type[GerchbergSaxton | LatychevskaiaFink] | None
+    iterations: int
+    algorithm, iterations = BASELINES[name]
     reconstruction: nn.Module
-    if BASELINES[name] == 0:
+    if algorithm is None:
         reconstruction = _BackPropagation(
             AngularSpectrumPropagator(
                 (size, size),
@@ -213,12 +225,12 @@ def build_baseline(name: str, geometry: Geometry) -> nn.Module:
             )
         )
     else:
-        reconstruction = GerchbergSaxton(
+        reconstruction = algorithm(
             size,
             geometry.wavelength,
             geometry.pixel_size,
             geometry.z_distance,
-            iterations=BASELINES[name],
+            iterations=iterations,
             numerical_aperture=geometry.numerical_aperture,
         )
     return _WithoutPropagationPhase(reconstruction, geometry.wavelength, geometry.z_distance)

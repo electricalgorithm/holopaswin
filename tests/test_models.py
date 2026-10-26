@@ -20,6 +20,7 @@ from holopaswin.models import (
     read_geometry,
     resolve_model,
 )
+from holopaswin.propagator import AngularSpectrumPropagator
 from holopaswin.resnet_unet import ResNetUNet
 from holopaswin.training.config import ModelSettings, TrainingConfig, config_from_dict, config_to_toml
 
@@ -61,6 +62,30 @@ def test_every_network_back_propagates_the_same_field(cls: type[nn.Module]) -> N
     with torch.no_grad():
         _, dirty = module(hologram)
     torch.testing.assert_close(dirty, expected, atol=1e-5, rtol=1e-5)
+
+
+def test_gerchberg_saxton_improves_on_back_propagation() -> None:
+    """GS on a weak transmission object moves away from ASM, depends on the iterations and gets closer to the truth.
+
+    The geometry is lensless with pixels larger than the wavelength, so ASM is
+    unitary and an object constraint that does nothing leaves GS equal to ASM.
+    """
+    size: int = 64
+    geometry: tuple[int, float, float, float] = (size, 532e-9, 4.65e-6, 0.02)
+    axis: torch.Tensor = torch.arange(size) - size / 2
+    disk: torch.Tensor = ((axis[:, None] ** 2 + axis[None, :] ** 2) < 10**2).float()
+    truth: torch.Tensor = ((1 - 0.1 * disk) * torch.exp(1j * 0.5 * disk))[None, None]
+    propagator: AngularSpectrumPropagator = AngularSpectrumPropagator((size, size), *geometry[1:])
+    hologram: torch.Tensor = propagator(truth).abs() ** 2
+
+    outputs: dict[int, torch.Tensor] = {}
+    for iterations in (0, 10, 40):
+        estimate, _ = GerchbergSaxton(*geometry, iterations=iterations)(hologram)
+        outputs[iterations] = torch.complex(estimate[:, :1], estimate[:, 1:])
+
+    assert (outputs[10] - outputs[0]).abs().max() > 1e-3
+    assert (outputs[40] - outputs[10]).abs().max() > 1e-4
+    assert (outputs[40] - truth).abs().mean() < (outputs[0] - truth).abs().mean()
 
 
 def write_recipe(folder: pathlib.Path, size: int = SIZE) -> None:

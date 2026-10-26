@@ -20,10 +20,18 @@ class GerchbergSaxton(nn.Module):
     The algorithm:
     1. Initialize at sensor: sqrt(H) with zero phase
     2. Back-propagate to object plane (ASM inverse)
-    3. Apply object constraint (support mask from amplitude threshold)
+    3. Apply the object constraint (see _constrain_object)
     4. Forward-propagate to sensor plane (ASM forward)
     5. Replace amplitude with measured sqrt(H), keep estimated phase
     6. Repeat for N iterations
+
+    The object constraint is what makes the iterations do anything. Without a
+    pupil, ASM is unitary, so sqrt(H) with zero phase is a fixed point of steps
+    2-5 when the constraint leaves the field unchanged, and every iteration then
+    returns the plain back-propagation. A support mask from thresholding the
+    back-propagated amplitude does exactly that for transmission objects on a
+    bright background: the amplitude stays near 1 everywhere, so every pixel
+    falls inside the support.
 
     Note: This is NOT a neural network - it's a deterministic iterative algorithm.
     We wrap it as nn.Module for API consistency with other models.
@@ -36,7 +44,6 @@ class GerchbergSaxton(nn.Module):
         pixel_size: float,
         z_distance: float,
         iterations: int = 100,
-        support_threshold: float = 0.5,
         numerical_aperture: float | None = None,
     ) -> None:
         """Initialize the GS algorithm.
@@ -47,14 +54,11 @@ class GerchbergSaxton(nn.Module):
             pixel_size: Pixel pitch in meters (e.g., 4.65e-6).
             z_distance: Propagation distance in meters (e.g., 0.02).
             iterations: Number of GS iterations to run.
-            support_threshold: Threshold for support constraint (0-1).
-                Pixels with amplitude < threshold * max are constrained.
             numerical_aperture: NA of the imaging objective of a magnified setup, applied in
                 forward propagation, or None for a lensless setup without a pupil.
         """
         super().__init__()
         self.iterations = iterations
-        self.support_threshold = support_threshold
 
         # Physics propagator (same as HoloPASWIN for fairness)
         self.propagator = AngularSpectrumPropagator(
@@ -78,64 +82,61 @@ class GerchbergSaxton(nn.Module):
         """
         # Ensure we're not computing gradients (iterative, not differentiable)
         with torch.no_grad():
-            batch_size = hologram.shape[0]
-
             # Initialize: sqrt(hologram) with zero phase at sensor plane
             # Add small epsilon to avoid sqrt(0) issues
-            amplitude_sensor = torch.sqrt(hologram + 1e-8)  # (B, 1, H, W)
-            phase_sensor = torch.zeros_like(amplitude_sensor)
-
-            # Initial complex field at sensor plane
-            field_sensor = amplitude_sensor * torch.exp(1j * phase_sensor)
+            amplitude_sensor: torch.Tensor = torch.sqrt(hologram + 1e-8)  # (B, 1, H, W)
+            field_sensor: torch.Tensor = torch.complex(amplitude_sensor, torch.zeros_like(amplitude_sensor))
 
             # Back-propagate to get initial dirty estimate (for return value)
-            dirty_field_complex = self.propagator(field_sensor, backward=True)
-            dirty_2ch = torch.cat([dirty_field_complex.real, dirty_field_complex.imag], dim=1)
-
-            # Build support mask from initial back-propagation
-            # This helps constrain the object region
-            initial_object = self.propagator(field_sensor, backward=True)
-            initial_amp = torch.abs(initial_object)
-            # Normalize per batch
-            max_amp = initial_amp.view(batch_size, -1).max(dim=1, keepdim=True)[0]
-            max_amp = max_amp.view(batch_size, 1, 1, 1) + 1e-8
-            support_mask = (initial_amp / max_amp) > self.support_threshold
+            dirty_field_complex: torch.Tensor = self.propagator(field_sensor, backward=True)
+            dirty_2ch: torch.Tensor = torch.cat([dirty_field_complex.real, dirty_field_complex.imag], dim=1)
 
             # GS iterations
-            current_field = field_sensor.clone()
-
+            current_field: torch.Tensor = field_sensor
+            object_field: torch.Tensor
+            sensor_field: torch.Tensor
             for _ in range(self.iterations):
-                # 1. Back-propagate to object plane
-                object_field = self.propagator(current_field, backward=True)
-
-                # 2. Apply object constraint (support mask)
-                # Inside support: keep field
-                # Outside support: reduce amplitude (soft constraint)
-                object_amp = torch.abs(object_field)
-                object_phase = torch.angle(object_field)
-
-                # Soft support: multiply amplitude by mask (0 outside, 1 inside)
-                # This is a gentler constraint than hard masking
-                constrained_amp = object_amp * support_mask.float() + object_amp * (1 - support_mask.float()) * 0.1
-
-                # Reconstruct complex field
-                object_field = constrained_amp * torch.exp(1j * object_phase)
+                # 1-2. Back-propagate to object plane and apply the object constraint
+                object_field = self._constrain_object(self.propagator(current_field, backward=True))
 
                 # 3. Forward-propagate to sensor plane
                 sensor_field = self.propagator(object_field, backward=False)
 
                 # 4. Apply sensor constraint: replace amplitude with measured sqrt(H)
-                sensor_phase = torch.angle(sensor_field)
-                current_field = amplitude_sensor * torch.exp(1j * sensor_phase)
+                current_field = amplitude_sensor * torch.exp(1j * torch.angle(sensor_field))
 
-            # Final back-propagation to get recovered object
-            recovered_object = self.propagator(current_field, backward=True)
+            # Final back-propagation, constrained like every iterate
+            recovered_object: torch.Tensor = self._constrain_object(self.propagator(current_field, backward=True))
 
             # Convert to 2-channel format (Real, Imag) for API consistency
-            recovered_2ch = torch.cat([recovered_object.real, recovered_object.imag], dim=1)
+            recovered_2ch: torch.Tensor = torch.cat([recovered_object.real, recovered_object.imag], dim=1)
 
             return recovered_2ch, dirty_2ch
 
+    @staticmethod
+    def _constrain_object(object_field: torch.Tensor) -> torch.Tensor:
+        """Apply the object-plane constraint to a back-propagated field.
+
+        The field is a transmission function normalised so that the empty
+        background is 1. It may carry a constant phase from the propagation
+        over z, so a constraint must not depend on the absolute phase.
+
+        A passive sample cannot amplify light, so the transmission amplitude is
+        at most 1. The twin image adds fringes of both signs around each object,
+        and clipping the bright half of them removes part of the twin at every
+        iteration. The phase is kept as it is: a constraint on its sign would
+        depend on the constant propagation phase, and objects whose phase wraps
+        past pi break it.
+
+        Args:
+            object_field: Complex object field of shape (B, 1, H, W).
+
+        Returns:
+            The constrained complex field, same shape, with amplitude at most 1.
+        """
+        amplitude: torch.Tensor = object_field.abs()
+        return torch.where(amplitude > 1, object_field / amplitude, object_field)
+
     def __repr__(self) -> str:
         """String representation."""  # noqa: D401
-        return f"GerchbergSaxton(iterations={self.iterations}, support_threshold={self.support_threshold})"
+        return f"GerchbergSaxton(iterations={self.iterations})"

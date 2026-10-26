@@ -18,6 +18,7 @@ from torch import nn
 from holopaswin.baselines.gerchberg_saxton import GerchbergSaxton
 from holopaswin.baselines.hrnet import HRNet
 from holopaswin.baselines.latychevskaia_fink import LatychevskaiaFink
+from holopaswin.baselines.total_variation import ConstrainedComplexTV
 from holopaswin.baselines.unet_baseline import UNetBaseline
 from holopaswin.dataset import MICROMETER, read_recipe_geometry
 from holopaswin.model import HoloPASWIN
@@ -27,12 +28,14 @@ from holopaswin.training.config import ARCHITECTURES, ModelSettings, TrainingCon
 
 # Classical reconstructions: the iterative algorithm and its number of iterations, or None for plain
 # back-propagation.
-BASELINES: dict[str, tuple[type[GerchbergSaxton | LatychevskaiaFink] | None, int]] = {
+BASELINES: dict[str, tuple[type[GerchbergSaxton | LatychevskaiaFink | ConstrainedComplexTV] | None, int]] = {
     "asm": (None, 0),
     "gs50": (GerchbergSaxton, 50),
     "gs100": (GerchbergSaxton, 100),
     "lf50": (LatychevskaiaFink, 50),
     "lf100": (LatychevskaiaFink, 100),
+    "tv50": (ConstrainedComplexTV, 50),
+    "tv100": (ConstrainedComplexTV, 100),
 }
 
 __all__ = [
@@ -195,8 +198,9 @@ def build_baseline(name: str, geometry: Geometry) -> nn.Module:
 
     Args:
         name (str): One of BASELINES: asm (back-propagation only), gs50 or gs100
-            (Gerchberg-Saxton), lf50 or lf100 (Latychevskaia-Fink), the
-            iterative ones with that many iterations.
+            (Gerchberg-Saxton), lf50 or lf100 (Latychevskaia-Fink), tv50 or
+            tv100 (constrained complex total variation), the iterative ones
+            with that many iterations.
         geometry (Geometry): Geometry of the dataset.
 
     Returns:
@@ -210,7 +214,7 @@ def build_baseline(name: str, geometry: Geometry) -> nn.Module:
         msg: str = f"Unknown baseline {name!r}; choose from {', '.join(BASELINES)}."
         raise ValueError(msg)
     size: int = geometry.resolution
-    algorithm: type[GerchbergSaxton | LatychevskaiaFink] | None
+    algorithm: type[GerchbergSaxton | LatychevskaiaFink | ConstrainedComplexTV] | None
     iterations: int
     algorithm, iterations = BASELINES[name]
     reconstruction: nn.Module

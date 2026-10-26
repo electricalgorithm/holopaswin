@@ -184,7 +184,8 @@ def evaluate(  # noqa: PLR0913 (one argument per command-line option)
             "--baseline",
             "-b",
             help="Classical reconstruction to score: asm (back-propagation), gs50 or gs100 (Gerchberg-Saxton), "
-            "lf50 or lf100 (Latychevskaia-Fink); repeat for several.",
+            "lf50 or lf100 (Latychevskaia-Fink), tv50 or tv100 (constrained complex total variation); "
+            "repeat for several.",
         ),
     ] = None,
     output: Annotated[
@@ -274,7 +275,9 @@ def figure(  # noqa: PLR0913 (one argument per command-line option)
     baseline: Annotated[
         list[str] | None,
         typer.Option(
-            "--baseline", "-b", help="Classical reconstruction to draw: asm, gs50, gs100, lf50 or lf100; repeatable."
+            "--baseline",
+            "-b",
+            help="Classical reconstruction to draw: asm, gs50, gs100, lf50, lf100, tv50 or tv100; repeatable.",
         ),
     ] = None,
     output: Annotated[pathlib.Path, typer.Option("--output", "-o", help="PNG file to write.")] = pathlib.Path(

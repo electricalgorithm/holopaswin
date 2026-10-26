@@ -9,6 +9,7 @@ from torch import nn
 from holopaswin.baselines.gerchberg_saxton import GerchbergSaxton
 from holopaswin.baselines.hrnet import HRNet
 from holopaswin.baselines.latychevskaia_fink import LatychevskaiaFink
+from holopaswin.baselines.total_variation import ConstrainedComplexTV
 from holopaswin.baselines.unet_baseline import UNetBaseline
 from holopaswin.model import HoloPASWIN
 from holopaswin.models import (
@@ -27,7 +28,15 @@ from holopaswin.training.config import ModelSettings, TrainingConfig, config_fro
 
 SIZE: int = 64
 GEOMETRY: tuple[int, float, float, float] = (SIZE, 532e-9, 0.24e-6, 20e-6)
-CLASSES: list[type[nn.Module]] = [UNetBaseline, ResNetUNet, HRNet, GerchbergSaxton, LatychevskaiaFink, HoloPASWIN]
+CLASSES: list[type[nn.Module]] = [
+    UNetBaseline,
+    ResNetUNet,
+    HRNet,
+    GerchbergSaxton,
+    LatychevskaiaFink,
+    ConstrainedComplexTV,
+    HoloPASWIN,
+]
 
 
 def construct(cls: type[nn.Module], numerical_aperture: float | None) -> nn.Module:
@@ -135,6 +144,43 @@ def test_latychevskaia_fink_support_holds_the_objects() -> None:
     inside: torch.Tensor = (truth - 1).abs() > 1e-3
     assert support[inside].min().item() == 1.0
     assert (support > 0.5).float().mean().item() < 0.5
+
+
+@pytest.mark.parametrize("numerical_aperture", [None, 0.45])
+def test_total_variation_uses_exact_adjoints(numerical_aperture: float | None) -> None:
+    """The solver's back-propagation and difference adjoints satisfy <A x, r> = <x, A^H r>."""
+    torch.manual_seed(0)
+    tv: ConstrainedComplexTV = ConstrainedComplexTV(*GEOMETRY, numerical_aperture=numerical_aperture)
+    field: torch.Tensor = torch.randn(1, 1, SIZE, SIZE, dtype=torch.complex64)
+    sensor: torch.Tensor = torch.randn(1, 1, SIZE, SIZE, dtype=torch.complex64)
+    differences: torch.Tensor = torch.randn(1, 2, SIZE, SIZE, dtype=torch.complex64)
+    forward: torch.Tensor = (tv.propagator(field) * sensor.conj()).sum()
+    adjoint: torch.Tensor = (field * tv._adjoint(sensor).conj()).sum()  # noqa: SLF001
+    assert (forward - adjoint).abs().item() < 1e-3
+    gradient: torch.Tensor = (tv._gradient(field) * differences.conj()).sum()  # noqa: SLF001
+    gradient_adjoint: torch.Tensor = (field * tv._gradient_adjoint(differences).conj()).sum()  # noqa: SLF001
+    assert (gradient - gradient_adjoint).abs().item() < 1e-3
+
+
+def test_total_variation_improves_on_back_propagation() -> None:
+    """CCTV moves away from ASM, depends on the iterations, gets closer to the truth and absorbs only."""
+    size: int = 64
+    geometry: tuple[int, float, float, float] = (size, 532e-9, 4.65e-6, 0.02)
+    truth: torch.Tensor = sparse_object(size)
+    propagator: AngularSpectrumPropagator = AngularSpectrumPropagator((size, size), *geometry[1:])
+    hologram: torch.Tensor = propagator(truth).abs() ** 2
+
+    # The outputs carry the constant phase exp(-i k z) of the back-propagation; compare without it.
+    incident: torch.Tensor = torch.conj(propagator.H[0, 0])
+    outputs: dict[int, torch.Tensor] = {}
+    for iterations in (0, 10, 40):
+        estimate, _ = ConstrainedComplexTV(*geometry, iterations=iterations)(hologram)
+        outputs[iterations] = torch.complex(estimate[:, :1], estimate[:, 1:]) / incident
+
+    assert (outputs[10] - outputs[0]).abs().max() > 1e-3
+    assert (outputs[40] - outputs[10]).abs().max() > 1e-4
+    assert (outputs[40] - truth).abs().mean() < 0.5 * (outputs[0] - truth).abs().mean()
+    assert outputs[40].abs().max().item() <= 1 + 1e-5
 
 
 def write_recipe(folder: pathlib.Path, size: int = SIZE) -> None:

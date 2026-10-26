@@ -25,6 +25,11 @@ class GerchbergSaxton(nn.Module):
     5. Replace amplitude with measured sqrt(H), keep estimated phase
     6. Repeat for N iterations
 
+    Gerchberg and Saxton (Optik 35, 237 (1972)) recover a phase from the
+    amplitudes known in two planes. Here the sensor amplitude is sqrt(H) and the
+    object amplitude is taken as 1, the amplitude of a pure phase object, so
+    absorbing objects lie outside what this baseline models.
+
     The object constraint is what makes the iterations do anything. Without a
     pupil, ASM is unitary, so sqrt(H) with zero phase is a fixed point of steps
     2-5 when the constraint leaves the field unchanged, and every iteration then
@@ -121,21 +126,19 @@ class GerchbergSaxton(nn.Module):
         background is 1. It may carry a constant phase from the propagation
         over z, so a constraint must not depend on the absolute phase.
 
-        A passive sample cannot amplify light, so the transmission amplitude is
-        at most 1. The twin image adds fringes of both signs around each object,
-        and clipping the bright half of them removes part of the twin at every
-        iteration. The phase is kept as it is: a constraint on its sign would
-        depend on the constant propagation phase, and objects whose phase wraps
-        past pi break it.
+        The object amplitude is known to be 1, so it replaces the estimated
+        amplitude and only the phase is kept. The twin image shows up in the
+        amplitude as fringes around each object, and replacing the amplitude
+        removes them at every iteration, while their effect on the phase fades
+        over the iterations.
 
         Args:
             object_field: Complex object field of shape (B, 1, H, W).
 
         Returns:
-            The constrained complex field, same shape, with amplitude at most 1.
+            The constrained complex field, same shape, with unit amplitude.
         """
-        amplitude: torch.Tensor = object_field.abs()
-        return torch.where(amplitude > 1, object_field / amplitude, object_field)
+        return torch.exp(1j * torch.angle(object_field))
 
     def __repr__(self) -> str:
         """String representation."""  # noqa: D401

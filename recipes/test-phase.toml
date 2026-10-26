@@ -1,0 +1,9 @@
+# Test set with twice the phase of every cell. Same seeds and groups as
+# test.toml, so hologram i holds the same cells as test hologram i.
+# Red blood cells at twice the phase are a stress test, not physical cells.
+[dataset]
+total_samples = 1000
+seed = 200000
+
+[objects]
+opd_scale = 2.0

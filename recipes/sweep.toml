@@ -1,0 +1,5 @@
+# Distance sweep: generate one set per offset from the same seeds, e.g.
+# hologen generate --recipe recipes/sweep.toml --z-offset -4 --output sweep/offset_-4
+[dataset]
+total_samples = 200
+seed = 900000

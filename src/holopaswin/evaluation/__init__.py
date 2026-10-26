@@ -1,5 +1,5 @@
-# Evaluation module for baseline comparison.  # noqa: D104
-from holopaswin.evaluation.evaluator import BaselineEvaluator
+"""Evaluation of reconstructions: metrics, scoring, statistics, figures and timing."""
+
 from holopaswin.evaluation.metrics import compute_all_metrics
 
-__all__ = ["BaselineEvaluator", "compute_all_metrics"]
+__all__ = ["compute_all_metrics"]

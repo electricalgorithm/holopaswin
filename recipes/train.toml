@@ -1,0 +1,4 @@
+# Training set at the nominal distance: 1,000 holograms per group.
+[dataset]
+total_samples = 8000
+seed = 10000

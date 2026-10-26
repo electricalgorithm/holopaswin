@@ -1,0 +1,8 @@
+# Test set with twice the laser speckle contrast of training. Same seeds and
+# groups as test.toml; only its camera_laser_speckle groups differ from it.
+[dataset]
+total_samples = 1000
+seed = 200000
+
+[speckle]
+laser_contrast = 0.25  # std/mean

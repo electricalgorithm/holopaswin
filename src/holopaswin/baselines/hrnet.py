@@ -61,6 +61,7 @@ class HRNet(nn.Module):
         z_distance: float,
         num_res_blocks: int = 2,
         residual_mode: bool = True,
+        numerical_aperture: float | None = None,
     ) -> None:
         """Initialize HRNet baseline.
 
@@ -71,6 +72,8 @@ class HRNet(nn.Module):
             z_distance: Propagation distance in meters.
             num_res_blocks: Number of residual blocks per scale.
             residual_mode: If True, predict correction; if False, predict clean directly.
+            numerical_aperture: NA of the imaging objective of a magnified setup, applied in
+                forward propagation, or None for a lensless setup without a pupil.
         """
         super().__init__()
         self.img_size = img_size
@@ -82,6 +85,7 @@ class HRNet(nn.Module):
             wavelength,
             pixel_size,
             z_distance,
+            numerical_aperture=numerical_aperture,
         )
 
         channels = [32, 64, 128]

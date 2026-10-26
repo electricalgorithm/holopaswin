@@ -1,0 +1,11 @@
+# Test set with strongly absorbing red blood cells: three times the haemoglobin
+# absorption of training (rim transmission 0.82 instead of 0.94). Adherent cells
+# stay transparent, as no measured absorption of stained adherent cells at this
+# wavelength is available, so the adherent groups equal test.toml. Same seeds and
+# groups as test.toml.
+[dataset]
+total_samples = 1000
+seed = 200000
+
+[objects]
+haemoglobin_absorption_scale = 3.0

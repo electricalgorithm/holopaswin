@@ -3,8 +3,17 @@
 This module provides the PhysicsLoss class which combines structural loss
 (supervised) with physics consistency loss (unsupervised constraint) to ensure
 that the predicted object, when forward-propagated, matches the input hologram.
+
+The physics term compares shapes, not absolute levels. The input hologram is
+normalised by its own mean (holopaswin.normalization), which is not exactly the
+illumination when the sample absorbs. Red blood cells at 532 nm lower the mean
+by about 2%, so their normalised background sits near 1.02. The forward-propagated
+prediction is therefore also divided by its own mean before the two are
+compared. A correct prediction then matches the input whatever the absorption,
+and no blank reference frame is needed.
 """
 
+import dataclasses
 from typing import TYPE_CHECKING
 
 import torch
@@ -13,23 +22,55 @@ if TYPE_CHECKING:
     from holopaswin.propagator import AngularSpectrumPropagator
 
 
+LAMBDA_PHYSICS: float = 0.1  # weight of the physics term in every published model
+
+
+@dataclasses.dataclass(frozen=True)
+class LossWeights:
+    """Weights of the supervised terms of the physics loss.
+
+    The defaults are the balance used for every published HoloPASWIN model, with
+    the amplitude as the main driver.
+    """
+
+    complex: float = 0.2  # L1 on the real and imaginary parts, a numerical stabiliser
+    amplitude: float = 0.4  # L1 on the amplitude, the main driver
+    phase: float = 0.2  # L1 on the phase, a structural guide
+    frequency: float = 0.2  # L1 on log spectra of amplitude and phase, for sharp edges
+
+
 class PhysicsLoss(torch.nn.Module):
     """Physics-constrained loss function for holographic reconstruction.
 
     Combines two loss terms:
     1. Structural Loss (L1): Supervised loss comparing predicted object to ground truth (Complex domain).
     2. Physics Consistency Loss: Unsupervised constraint ensuring predicted object,
-       when forward-propagated, matches the input hologram intensity.
+       when forward-propagated, matches the input hologram intensity. Both are
+       divided by their own mean first (see scale_invariant_physics_loss).
 
     The total loss is: L = L_structural + lambda_physics * L_physics
     """
 
-    def __init__(self, propagator: "AngularSpectrumPropagator", lambda_physics: float = 0.1) -> None:
-        """Initialize the physics loss function."""
+    def __init__(
+        self,
+        propagator: "AngularSpectrumPropagator",
+        lambda_physics: float = LAMBDA_PHYSICS,
+        weights: LossWeights | None = None,
+    ) -> None:
+        """Initialize the physics loss function.
+
+        Args:
+            propagator (AngularSpectrumPropagator): Propagator of the model, used
+                for the physics term.
+            lambda_physics (float): Weight of the physics term.
+            weights (LossWeights | None): Weights of the supervised terms, or None
+                for the defaults.
+        """
         super().__init__()
         self.propagator = propagator
         self.l1 = torch.nn.L1Loss()
         self.lambda_p = lambda_physics
+        self.weights: LossWeights = LossWeights() if weights is None else weights
 
     def compute_freq_loss(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         """Compute L1 loss in the frequency domain (Spectral Loss)."""
@@ -43,11 +84,30 @@ class PhysicsLoss(torch.nn.Module):
 
         return self.l1(pred_mag, target_mag)  # type: ignore[no-any-return]
 
+    def scale_invariant_physics_loss(self, pred_hologram: torch.Tensor, input_hologram: torch.Tensor) -> torch.Tensor:
+        """Compare two holograms after dividing each by its own mean.
+
+        Args:
+            pred_hologram (torch.Tensor): Forward-propagated intensity
+                |ASM(O)|^2 of the prediction, shape (B, 1, H, W).
+            input_hologram (torch.Tensor): Mean-normalised input hologram, shape
+                (B, 1, H, W).
+
+        Returns:
+            torch.Tensor: L1 between the two, each normalised per sample to a
+                mean of 1, as a scalar tensor.
+        """
+        eps: float = 1e-8
+        pred_mean: torch.Tensor = pred_hologram.mean(dim=(-3, -2, -1), keepdim=True)
+        input_mean: torch.Tensor = input_hologram.mean(dim=(-3, -2, -1), keepdim=True)
+        return torch.nn.functional.l1_loss(pred_hologram / (pred_mean + eps), input_hologram / (input_mean + eps))
+
     def forward(
         self,
         pred_obj_2ch: torch.Tensor,
         target_obj_2ch: torch.Tensor,
         input_hologram: torch.Tensor,
+        z_true: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """Compute the physics-constrained loss with Frequency awareness.
 
@@ -57,6 +117,10 @@ class PhysicsLoss(torch.nn.Module):
             target_obj_2ch: Ground truth object tensor of shape (B, 2, H, W).
                             Channel 0: Real, Channel 1: Imag.
             input_hologram: Input hologram intensity tensor of shape (B, 1, H, W).
+            z_true: Distance in meters at which each hologram was recorded, shape
+                (B,), or None for the propagator's distance. Only the physics
+                term uses it, so that z-augmented training compares a correct
+                prediction with its hologram at the right distance.
 
         Returns:
             Total loss value as a scalar tensor.
@@ -88,17 +152,19 @@ class PhysicsLoss(torch.nn.Module):
         loss_freq = (loss_freq_amp + loss_freq_phase) / 2.0
 
         # 5. Physics Consistency Loss (Unsupervised constraint)
-        # Propagate +z (Forward to Hologram Plane)
-        pred_field_holo = self.propagator(pred_complex, backward=False)
+        # Propagate +z (Forward to Hologram Plane), through the objective pupil
+        # when the propagator has a numerical aperture.
+        pred_field_holo = self.propagator(pred_complex, backward=False, z=z_true)
         pred_hologram = torch.abs(pred_field_holo) ** 2
-        loss_phy = self.l1(pred_hologram, input_hologram)
+        loss_phy = self.scale_invariant_physics_loss(pred_hologram, input_hologram)
 
-        # Total Loss Combination
-        # New Balanced Strategy:
-        # - Amp (0.4): Still the main driver.
-        # - Phase (0.2): Structural guide.
-        # - Freq (0.2): Edge/Sharpness enforcer.
-        # - Complex (0.2): Numerical stabilizer.
-        loss_supervised = (0.2 * loss_complex) + (0.4 * loss_amp) + (0.2 * loss_phase) + (0.2 * loss_freq)
+        # Total loss, with the supervised terms weighted as in LossWeights.
+        weights: LossWeights = self.weights
+        loss_supervised = (
+            (weights.complex * loss_complex)
+            + (weights.amplitude * loss_amp)
+            + (weights.phase * loss_phase)
+            + (weights.frequency * loss_freq)
+        )
 
         return loss_supervised + (self.lambda_p * loss_phy)  # type: ignore[no-any-return]

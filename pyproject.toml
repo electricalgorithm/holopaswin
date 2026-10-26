@@ -7,7 +7,7 @@ name = "holopaswin"
 version = "0.1.0"
 description = "Physics-Aware Swin Transformer for eliminating twin-image artifacts in in-line holography"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = {text = "MIT"}
 authors = [
     {name = "Gökhan Koçmarlı", email = "hello@gyokhan.com"}
@@ -25,7 +25,6 @@ classifiers = [
     "Intended Audience :: Science/Research",
     "Topic :: Scientific/Engineering :: Image Processing",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
 ]
@@ -40,12 +39,19 @@ dependencies = [
     "tqdm>=4.65.0",
     "pandas>=2.3.3",
     "pyarrow>=22.0.0",
+    "scipy>=1.11",
+    "typer>=0.27.3",
 ]
+
+[project.scripts]
+holopaswin = "holopaswin.cli:app"
 
 [project.optional-dependencies]
 dev = [
     "ruff>=0.14.0",
     "mypy>=1.0.0",
+    "pytest>=8.0.0",
+    "pytest-cov>=6.0",
 ]
 jupyter = [
     "jupyter>=1.0.0",
@@ -58,7 +64,7 @@ where = ["src"]
 
 [tool.ruff]
 line-length = 120
-target-version = "py310"
+target-version = "py311"
 
 [tool.ruff.lint]
 ignore = [
@@ -85,6 +91,13 @@ select = [
 fixable = ["ALL"]
 unfixable = []
 
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = [
+    "S101",    # pytest uses assert
+    "PLR2004", # tests compare against literal expected values
+    "INP001",  # tests are not a package
+]
+
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
@@ -94,7 +107,7 @@ docstring-code-format = false
 docstring-code-line-length = "dynamic"
 
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.11"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = false
@@ -119,3 +132,13 @@ dev = [
     "types-tqdm>=4.67.0.20250809",
 ]
 
+
+[tool.pytest.ini_options]
+# Every test run measures coverage of the package and fails below the gate.
+addopts = "--cov=holopaswin --cov-report=term-missing:skip-covered"
+
+[tool.coverage.run]
+branch = true
+
+[tool.coverage.report]
+fail_under = 97

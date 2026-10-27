@@ -7,6 +7,9 @@ later reconstruction routine (Appl. Opt. 54, 3925 (2015)) adds a support and a
 smoothing step; this module follows that routine.
 """
 
+import math
+import warnings
+
 import torch
 import torch.nn.functional as F  # noqa: N812
 from torch import nn
@@ -19,6 +22,11 @@ SMOOTHING_KERNEL: list[list[float]] = [[1.0] * 5, [1.0] * 5, [1.0, 1.0, 4.0, 1.0
 # Scale from the median absolute deviation to the standard deviation of normal noise.
 MAD_TO_SIGMA: float = 1.4826
 
+# Below and above these fractions of the field, a thresholded support has found no
+# objects or no background, and the whole field is used as the support instead.
+MIN_SUPPORT_FRACTION: float = 1e-3
+MAX_SUPPORT_FRACTION: float = 0.9
+
 
 class LatychevskaiaFink(nn.Module):
     """Iterative reconstruction with physical constraints on the object.
@@ -28,7 +36,8 @@ class LatychevskaiaFink(nn.Module):
     object. Each iteration:
     1. Back-propagates the sensor field and divides it by the incident wave,
        which gives t.
-    2. Sets t to 1 outside a support found in the first reconstruction.
+    2. Sets t to 1 outside a support found in the first reconstruction (the
+       whole field when no support can be told apart from the background).
     3. Replaces negative absorption by zero, so |t| is at most 1, keeping phi.
     4. Smooths |t| with the 5 x 5 kernel of the 2015 routine, keeping phi.
     5. Forward-propagates t times the incident wave and replaces the amplitude
@@ -55,7 +64,7 @@ class LatychevskaiaFink(nn.Module):
         iterations: int = 100,
         numerical_aperture: float | None = None,
         support_threshold: float = 3.0,
-        support_margin: int = 4,
+        support_margin: float = 3e-6,
         support_blur: float = 2.0,
     ) -> None:
         """Initialize the algorithm.
@@ -71,8 +80,15 @@ class LatychevskaiaFink(nn.Module):
             support_threshold: A pixel belongs to the support when its smoothed
                 deviation from the empty background exceeds the median deviation
                 by this many robust standard deviations.
-            support_margin: Pixels added around the support on every side; the
-                2015 routine makes the support 7 pixels wider than the object.
+            support_margin: Distance in meters added around the support on
+                every side, rounded up to whole pixels and at least one. The
+                threshold finds the centres of strong objects but not their
+                rims, and a rim left outside the support is forced to 1, so the
+                margin must reach past it. The 2015 routine adds about 3 pixels
+                around one object; pixel counts do not carry across
+                magnifications, so the margin is a distance. 3 um was chosen on
+                training data: 13 pixels at 0.24 um suit dense cells, and the
+                single pixel it gives at 4.65 um suits sparse objects.
             support_blur: Standard deviation in pixels of the Gaussian that
                 softens the edge of the support, 2 pixels in the 2015 routine.
         """
@@ -80,6 +96,7 @@ class LatychevskaiaFink(nn.Module):
         self.iterations = iterations
         self.support_threshold = support_threshold
         self.support_margin = support_margin
+        self.margin_pixels: int = max(1, math.ceil(support_margin / pixel_size))
         self.support_blur = support_blur
 
         # Physics propagator (same as HoloPASWIN for fairness)
@@ -150,7 +167,10 @@ class LatychevskaiaFink(nn.Module):
         The deviation |t - 1| is large on the objects and small on the empty
         background, where only noise and the weaker twin fringes remain. It is
         smoothed, thresholded against its median and median absolute deviation,
-        widened by the margin and given a soft Gaussian edge.
+        widened by the margin and given a soft Gaussian edge. A threshold that
+        keeps almost nothing, or almost everything, has not separated objects
+        from background (with objects over half the field the median lies on
+        them); the whole field is then the support, with a warning.
 
         Args:
             transmission: Transmission of the first reconstruction, (B, 1, H, W).
@@ -164,8 +184,19 @@ class LatychevskaiaFink(nn.Module):
         spread: torch.Tensor = (flat - median.flatten(1)).abs().median(dim=1).values[:, None, None, None]
         mask: torch.Tensor = (deviation > median + self.support_threshold * MAD_TO_SIGMA * spread).to(deviation.dtype)
 
-        width: int = 2 * self.support_margin + 1
-        mask = F.max_pool2d(mask, width, stride=1, padding=self.support_margin)
+        fraction: torch.Tensor = mask.flatten(1).mean(dim=1)
+        unseparated: torch.Tensor = (fraction < MIN_SUPPORT_FRACTION) | (fraction > MAX_SUPPORT_FRACTION)
+        if bool(unseparated.any()):
+            warnings.warn(
+                f"No support found in {int(unseparated.sum())} of {mask.shape[0]} holograms; "
+                "using the whole field there.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            mask[unseparated] = 1.0
+
+        width: int = 2 * self.margin_pixels + 1
+        mask = F.max_pool2d(mask, width, stride=1, padding=self.margin_pixels)
 
         radius: int = max(1, round(3 * self.support_blur))
         offsets: torch.Tensor = torch.arange(-radius, radius + 1, device=mask.device, dtype=mask.dtype)

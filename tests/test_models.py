@@ -96,6 +96,7 @@ def test_gerchberg_saxton_improves_on_back_propagation() -> None:
     assert (outputs[10] - outputs[0]).abs().max() > 1e-3
     assert (outputs[40] - outputs[10]).abs().max() > 1e-4
     assert (outputs[40] - truth).abs().mean() < (outputs[0] - truth).abs().mean()
+    torch.testing.assert_close(outputs[40].abs(), torch.ones_like(outputs[40].abs()), atol=1e-5, rtol=0)
 
 
 def sparse_object(size: int) -> torch.Tensor:
@@ -133,6 +134,26 @@ def test_latychevskaia_fink_improves_on_back_propagation() -> None:
     assert (outputs[10] - torch.complex(asm[:, :1], asm[:, 1:]) / incident).abs().max() > 1e-3
     assert (outputs[40] - outputs[10]).abs().max() > 1e-4
     assert (outputs[40] - truth).abs().mean() < 0.5 * (outputs[0] - truth).abs().mean()
+    assert outputs[40].abs().max().item() <= 1 + 1e-5
+
+
+def test_latychevskaia_fink_constraint_clips_and_smooths() -> None:
+    """Inside the support |t| is clipped to 1 and smoothed, the phase kept; outside, t is 1."""
+    size: int = 16
+    lf: LatychevskaiaFink = LatychevskaiaFink(size, 532e-9, 4.65e-6, 0.02)
+    rows: torch.Tensor = torch.arange(size)[:, None]
+    columns: torch.Tensor = torch.arange(size)[None, :]
+    checkerboard: torch.Tensor = 0.6 + 0.6 * ((rows + columns) % 2).float()
+    transmission: torch.Tensor = (checkerboard * torch.exp(1j * torch.full((size, size), 0.3)))[None, None]
+    support: torch.Tensor = torch.zeros(1, 1, size, size)
+    support[..., 4:12, 4:12] = 1.0
+    constrained: torch.Tensor = lf._constrain_object(transmission, support)  # noqa: SLF001
+    inside: torch.Tensor = constrained[..., 6:10, 6:10]
+    # Clipping turns 1.2 into 1 before the kernel averages 0.6 and 1, so the result lies strictly between them.
+    assert inside.abs().max().item() < 1.0
+    assert inside.abs().min().item() > 0.6
+    torch.testing.assert_close(torch.angle(inside), torch.full_like(inside.real, 0.3), atol=1e-5, rtol=0)
+    torch.testing.assert_close(constrained[..., :2, :2], torch.ones(1, 1, 2, 2, dtype=constrained.dtype))
 
 
 def test_latychevskaia_fink_support_holds_the_objects() -> None:
@@ -144,6 +165,57 @@ def test_latychevskaia_fink_support_holds_the_objects() -> None:
     inside: torch.Tensor = (truth - 1).abs() > 1e-3
     assert support[inside].min().item() == 1.0
     assert (support > 0.5).float().mean().item() < 0.5
+
+
+def test_latychevskaia_fink_margin_is_a_distance() -> None:
+    """The 3 um margin is 13 pixels at the magnified 0.24 um pitch and one pixel at a 4.65 um sensor."""
+    assert LatychevskaiaFink(32, 532e-9, 0.24e-6, 20e-6).margin_pixels == 13
+    assert LatychevskaiaFink(32, 532e-9, 4.65e-6, 0.02).margin_pixels == 1
+
+
+def disk_hologram(radius: int, phase: float) -> tuple[LatychevskaiaFink, torch.Tensor, torch.Tensor]:
+    """Back-propagate the hologram of one phase disk in the magnified setup.
+
+    Args:
+        radius (int): Disk radius in pixels.
+        phase (float): Phase shift of the disk in radians.
+
+    Returns:
+        tuple[LatychevskaiaFink, torch.Tensor, torch.Tensor]: The reconstruction
+            for a 128-pixel field at 0.24 um and NA 0.45, the transmission of the
+            first reconstruction and the disk mask.
+    """
+    size: int = 128
+    lf: LatychevskaiaFink = LatychevskaiaFink(size, 532e-9, 0.24e-6, 20e-6, numerical_aperture=0.45)
+    axis: torch.Tensor = torch.arange(size) - size / 2
+    disk: torch.Tensor = (axis[:, None] ** 2 + axis[None, :] ** 2) < radius**2
+    hologram: torch.Tensor = lf.propagator(torch.exp(1j * phase * disk.float())[None, None]).abs() ** 2
+    back: torch.Tensor = lf.propagator(torch.sqrt(hologram).to(torch.complex64), backward=True)
+    return lf, back / torch.conj(lf.propagator.H[0, 0]), disk
+
+
+def test_latychevskaia_fink_support_holds_a_strong_cell_in_the_magnified_setup() -> None:
+    """A strong phase disk larger than the margin lies wholly inside the support, which stays well short of the field."""
+    lf, transmission, disk = disk_hologram(radius=20, phase=1.5)
+    support: torch.Tensor = lf.find_support(transmission)[0, 0]
+    assert support[disk].min().item() == 1.0
+    assert (support > 0.5).float().mean().item() < 0.6
+
+
+def test_latychevskaia_fink_falls_back_to_the_whole_field() -> None:
+    """With nothing to tell apart from the background, the whole field is the support, with a warning.
+
+    A disk over half the field puts the median deviation on the disk, so the
+    threshold keeps nothing; an empty field has no deviation at all.
+    """
+    size: int = 64
+    lf: LatychevskaiaFink = LatychevskaiaFink(size, 532e-9, 0.24e-6, 20e-6)
+    axis: torch.Tensor = torch.arange(size) - size / 2
+    large: torch.Tensor = ((axis[:, None] ** 2 + axis[None, :] ** 2) < 26**2).float()
+    transmissions: torch.Tensor = torch.stack([torch.exp(1j * large), torch.ones(size, size, dtype=torch.complex64)])
+    with pytest.warns(RuntimeWarning, match="No support found in 2 of 2"):
+        support: torch.Tensor = lf.find_support(transmissions[:, None])
+    torch.testing.assert_close(support, torch.ones_like(support))
 
 
 @pytest.mark.parametrize("numerical_aperture", [None, 0.45])
@@ -254,6 +326,8 @@ def test_a_run_for_another_image_size_is_rejected(tmp_path: pathlib.Path) -> Non
         resolve_model(tmp_path / "run", read_geometry(tmp_path / "test"), torch.device("cpu"))
 
 
+# An empty hologram holds no objects, so Latychevskaia-Fink rightly warns that it found no support.
+@pytest.mark.filterwarnings("ignore:No support found:RuntimeWarning")
 @pytest.mark.parametrize("name", BASELINES)
 def test_baselines_have_no_propagation_phase(tmp_path: pathlib.Path, name: str) -> None:
     """On an empty hologram the classical reconstructions are the flat unit field."""

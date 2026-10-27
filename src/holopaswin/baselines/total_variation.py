@@ -100,13 +100,14 @@ class ConstrainedComplexTV(nn.Module):
         """
         with torch.no_grad():
             amplitude_sensor: torch.Tensor = torch.sqrt(hologram + 1e-8)
-            dirty_field_complex: torch.Tensor = self._adjoint(
-                torch.complex(amplitude_sensor, torch.zeros_like(amplitude_sensor))
-            )
+            field_sensor: torch.Tensor = torch.complex(amplitude_sensor, torch.zeros_like(amplitude_sensor))
+
+            # The plain back-propagation, as every other model returns it.
+            dirty_field_complex: torch.Tensor = self.propagator(field_sensor, backward=True)
             dirty_2ch: torch.Tensor = torch.cat([dirty_field_complex.real, dirty_field_complex.imag], dim=1)
 
             # Gao and Cao start from the back-propagated amplitude, x0 = A^H sqrt(H).
-            current: torch.Tensor = dirty_field_complex
+            current: torch.Tensor = self._adjoint(field_sensor)
             previous: torch.Tensor = current
             extrapolated: torch.Tensor
             sensor_field: torch.Tensor
@@ -180,11 +181,12 @@ class ConstrainedComplexTV(nn.Module):
     def _proximal(self, point: torch.Tensor) -> torch.Tensor:
         """Proximal operator of step * (lam ||D x||_1 + constraint) at a point.
 
-        It has no closed form. Gao and Cao solve its dual,
-        min over |w| <= lam of the distance from point - step D^H w to the
-        constraint set, with accelerated projected gradient steps, and recover
-        x = P(point - step D^H w). A few steps give an inexact but sufficient
-        proximal operator.
+        It has no closed form. Gao and Cao solve its dual with the fast
+        gradient projection of Beck and Teboulle (IEEE Trans. Image Process.
+        18, 2419 (2009)): accelerated projected gradient steps on a dual
+        variable w with |w| <= lam entrywise, after which the primal point is
+        x = P(point - step D^H w), with P the projection onto |x| <= 1. A few
+        steps give an inexact but sufficient proximal operator.
 
         Args:
             point: Complex field of shape (B, 1, H, W).

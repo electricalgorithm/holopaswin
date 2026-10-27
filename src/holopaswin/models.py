@@ -26,9 +26,12 @@ from holopaswin.propagator import AngularSpectrumPropagator
 from holopaswin.resnet_unet import ResNetUNet
 from holopaswin.training.config import ARCHITECTURES, ModelSettings, TrainingConfig, load_config
 
+# The iterative classical reconstructions; they share one constructor signature.
+ClassicalAlgorithm = type[GerchbergSaxton | LatychevskaiaFink | ConstrainedComplexTV]
+
 # Classical reconstructions: the iterative algorithm and its number of iterations, or None for plain
 # back-propagation.
-BASELINES: dict[str, tuple[type[GerchbergSaxton | LatychevskaiaFink | ConstrainedComplexTV] | None, int]] = {
+BASELINES: dict[str, tuple[ClassicalAlgorithm | None, int]] = {
     "asm": (None, 0),
     "gs50": (GerchbergSaxton, 50),
     "gs100": (GerchbergSaxton, 100),
@@ -214,7 +217,7 @@ def build_baseline(name: str, geometry: Geometry) -> nn.Module:
         msg: str = f"Unknown baseline {name!r}; choose from {', '.join(BASELINES)}."
         raise ValueError(msg)
     size: int = geometry.resolution
-    algorithm: type[GerchbergSaxton | LatychevskaiaFink | ConstrainedComplexTV] | None
+    algorithm: ClassicalAlgorithm | None
     iterations: int
     algorithm, iterations = BASELINES[name]
     reconstruction: nn.Module

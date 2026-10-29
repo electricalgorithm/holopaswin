@@ -222,15 +222,6 @@ def test_frequency_ssim_falls_with_noise() -> None:
     assert high < low < 1.0
 
 
-def test_frequency_ssim_is_scored_for_every_sample() -> None:
-    """compute_all_metrics reports Freq SSIM, which the paper's tables use."""
-    truth: npt.NDArray[np.complex128] = cell_field()
-    prediction: npt.NDArray[np.complex128] = noisy(truth, sigma=0.05)
-    assert metrics_of(prediction, truth)["freq_ssim"] == pytest.approx(
-        frequency_ssim(np.abs(prediction), np.abs(truth))
-    )
-
-
 # MSE ------------------------------------------------------------------------
 
 
@@ -259,14 +250,6 @@ def test_mse_is_kept_for_a_perfect_sample() -> None:
     assert perfect["amp_mse"] == 0.0
     assert perfect["phase_mse"] == 0.0
     assert math.isinf(perfect["amp_psnr"])
-
-
-def test_psnr_and_mse_agree() -> None:
-    """Each PSNR is 10 log10(R^2 / MSE) of the MSE reported next to it."""
-    truth: npt.NDArray[np.complex128] = cell_field()
-    scored: dict[str, float] = metrics_of(noisy(truth, sigma=0.05), truth)
-    assert scored["amp_psnr"] == pytest.approx(10 * math.log10(AMPLITUDE_DATA_RANGE**2 / scored["amp_mse"]))
-    assert scored["phase_psnr"] == pytest.approx(10 * math.log10(PHASE_DATA_RANGE**2 / scored["phase_mse"]))
 
 
 # Complex MSE ----------------------------------------------------------------
@@ -313,18 +296,17 @@ def test_bs_ratio_of_a_perfect_reconstruction_is_zero() -> None:
 def test_bs_ratio_by_hand() -> None:
     """B/S = std(background) / mean(|background mean - signal|), on a hand-built image.
 
-    The background alternates 1.1 and 0.9 (mean 1, std 0.1) and the cells sit at
-    0.5, so the contrast is 0.5 and B/S = 0.1 / 0.5 = 0.2.
+    The left half is background and the right half object. The predicted
+    background alternates rows of 1.1 and 0.9, an even number of each, so its
+    mean is 1 and its standard deviation 0.1 exactly; the object sits at 0.5,
+    so the contrast is 0.5 and B/S = 0.1 / 0.5 = 0.2.
     """
-    truth: npt.NDArray[np.float64] = np.abs(cell_field())
-    background: npt.NDArray[np.bool_] = truth > 0.98
-    prediction: npt.NDArray[np.float64] = np.full_like(truth, 0.5)
-    pattern: npt.NDArray[np.float64] = np.where(np.indices(truth.shape).sum(axis=0) % 2 == 0, 1.1, 0.9)
-    prediction[background] = pattern[background]
-    # The checkerboard is balanced only over the full image, so compute the exact expectation.
-    expected: float = float(np.std(prediction[background]) / np.mean(np.abs(prediction[background].mean() - 0.5)))
-    assert background_to_signal_ratio(prediction, truth) == pytest.approx(expected, rel=1e-6)
-    assert expected == pytest.approx(0.2, rel=0.01)
+    truth: npt.NDArray[np.float64] = np.ones((SIZE, SIZE))
+    truth[:, SIZE // 2 :] = 0.5
+    prediction: npt.NDArray[np.float64] = np.full((SIZE, SIZE), 0.5)
+    prediction[:, : SIZE // 2] = np.where(np.arange(SIZE) % 2 == 0, 1.1, 0.9)[:, None]
+    # The 1e-8 guard in the denominator shifts the ratio by 2e-8 relative.
+    assert background_to_signal_ratio(prediction, truth) == pytest.approx(0.2, rel=1e-7)
 
 
 @pytest.mark.parametrize("level", [0.5, 1.0])

@@ -75,6 +75,10 @@ def test_sweep_writes_samples_summary_and_figure(tmp_path: pathlib.Path, checkpo
     summary: dict = json.loads((output / "summary.json").read_text())
     assert "phase_psnr" in summary
     assert set(summary["phase_psnr"]) == {"all", "adherent_cells", "red_blood_cells"}
+    # The MSEs are summarised; the background ratio checks the scale and stays per sample only.
+    assert {"amp_mse", "phase_mse", "freq_ssim"} <= set(summary)
+    assert "bg_amp_ratio" not in summary
+    assert "bg_amp_ratio" in table.columns
     assert (output / "z_sweep.png").stat().st_size > 0
 
 
@@ -210,6 +214,11 @@ def test_evaluate_scores_models_and_baselines_with_breakdowns(
     assert set(psnr["asm"]["config_name"]) == {"camera", "camera_laser_speckle"}
     assert summary["compared"] == ["standard", "asm"]
     assert set(summary["paired_tests"]["phase_psnr"]) == {"all", "object_family", "config_name"}
+    # The MSEs are summarised and tested; the background ratio checks the scale and stays per sample only.
+    assert {"amp_mse", "phase_mse", "freq_ssim"} <= set(summary["metrics"])
+    assert "bg_amp_ratio" not in summary["metrics"]
+    assert "bg_amp_ratio" not in summary["paired_tests"]
+    assert "bg_amp_ratio" in table.columns
 
 
 @pytest.mark.parametrize(

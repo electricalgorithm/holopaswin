@@ -9,7 +9,7 @@ from holo_fixtures import write_dataset
 from torch import nn
 
 from holopaswin.dataset import HoloDataset
-from holopaswin.models import ARCHITECTURES, load_run
+from holopaswin.factory import ARCHITECTURES, load_run
 from holopaswin.training import trainer
 from holopaswin.training.config import TrainingConfig, config_from_dict, load_config
 from holopaswin.training.trainer import train

@@ -19,7 +19,7 @@ import torch
 from torch import nn
 
 from holopaswin.dataset import HoloDataset
-from holopaswin.models import Geometry, build_model, propagator_of, read_geometry, resolve_model
+from holopaswin.factory import Geometry, build_model, propagator_of, read_geometry, resolve_model
 from holopaswin.normalization import normalize_hologram
 from holopaswin.training.config import ModelSettings
 

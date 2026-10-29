@@ -44,7 +44,7 @@ from holopaswin.evaluation.scoring import (
     metric_columns,
     score_batch,
 )
-from holopaswin.models import read_geometry
+from holopaswin.factory import read_geometry
 from holopaswin.propagator import AngularSpectrumPropagator
 
 if TYPE_CHECKING:

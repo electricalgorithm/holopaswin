@@ -18,7 +18,7 @@ from torch import nn
 
 from holopaswin.evaluation.scoring import build_propagator, evaluate_set, metric_columns, write_json
 from holopaswin.evaluation.statistics import bootstrap_median, paired_tests
-from holopaswin.models import Geometry, build_baseline, read_geometry, resolve_model
+from holopaswin.factory import Geometry, build_baseline, read_geometry, resolve_model
 
 # Groupings of the summary: every hologram, per object family, per noise configuration.
 GROUPINGS: tuple[str, ...] = ("all", "object_family", "config_name")
@@ -37,7 +37,7 @@ def run_evaluation(  # noqa: PLR0913
     Args:
         test_dir (Path): hologen test set, with its recipe.toml.
         runs (dict[str, Path]): Run folder or checkpoint by model name.
-        baselines (list[str]): Classical baselines, any of holopaswin.models.BASELINES.
+        baselines (list[str]): Classical baselines, any of holopaswin.factory.BASELINES.
         device (torch.device): Device the methods run on.
         batch_size (int): Holograms per forward pass.
         limit (int | None): Holograms to use, or None for all.

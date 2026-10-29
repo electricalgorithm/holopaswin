@@ -11,8 +11,7 @@ from holopaswin.baselines.hrnet import HRNet
 from holopaswin.baselines.latychevskaia_fink import LatychevskaiaFink
 from holopaswin.baselines.total_variation import ConstrainedComplexTV
 from holopaswin.baselines.unet_baseline import UNetBaseline
-from holopaswin.model import WIRING_VERSION, HoloPASWIN
-from holopaswin.models import (
+from holopaswin.factory import (
     ARCHITECTURES,
     BASELINES,
     Geometry,
@@ -22,6 +21,7 @@ from holopaswin.models import (
     read_geometry,
     resolve_model,
 )
+from holopaswin.model import WIRING_VERSION, HoloPASWIN
 from holopaswin.propagator import AngularSpectrumPropagator
 from holopaswin.resnet_unet import ResNetUNet
 from holopaswin.training.config import ModelSettings, TrainingConfig, config_from_dict, config_to_toml

@@ -36,7 +36,7 @@ from holopaswin.evaluation.scoring import (
     write_json,
 )
 from holopaswin.evaluation.statistics import bootstrap_median, paired_tests
-from holopaswin.models import Geometry, read_geometry, resolve_model
+from holopaswin.factory import Geometry, read_geometry, resolve_model
 
 if TYPE_CHECKING:
     from holopaswin.propagator import AngularSpectrumPropagator

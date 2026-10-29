@@ -15,7 +15,7 @@ import torch
 from torch import nn
 
 from holopaswin.dataset import HoloDataset
-from holopaswin.models import Geometry, build_baseline, read_geometry, resolve_model
+from holopaswin.factory import Geometry, build_baseline, read_geometry, resolve_model
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
@@ -67,7 +67,7 @@ def reconstruct_samples(
     Args:
         test_dir (Path): hologen test set, with its recipe.toml.
         runs (dict[str, Path]): Run folder or checkpoint by model name.
-        baselines (list[str]): Classical baselines, any of holopaswin.models.BASELINES.
+        baselines (list[str]): Classical baselines, any of holopaswin.factory.BASELINES.
         samples (list[int]): Indices of the holograms to reconstruct.
         device (torch.device): Device the methods run on.
 

@@ -23,8 +23,8 @@ from torch import nn
 from torch.utils.data import DataLoader, Subset, random_split
 
 from holopaswin.dataset import HoloDataset
+from holopaswin.factory import Geometry, build_model, propagator_of, read_geometry
 from holopaswin.loss import PhysicsLoss
-from holopaswin.models import Geometry, build_model, propagator_of, read_geometry
 from holopaswin.training.config import TrainingConfig, config_to_toml, load_config
 
 HISTORY_COLUMNS: list[str] = ["epoch", "train_loss", "val_loss", "seconds"]

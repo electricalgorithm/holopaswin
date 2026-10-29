@@ -313,7 +313,7 @@ def figure(  # noqa: PLR0913 (one argument per command-line option)
     """  # noqa: D301 (typer hides the text after the form feed from --help)
     from holopaswin.evaluation.figures import check_zoom, draw_figure, reconstruct_samples  # noqa: PLC0415
     from holopaswin.evaluation.scoring import parse_model_specs  # noqa: PLC0415
-    from holopaswin.models import read_geometry  # noqa: PLC0415
+    from holopaswin.factory import read_geometry  # noqa: PLC0415
 
     try:
         indices: list[int] = parse_integers(samples, "--samples")

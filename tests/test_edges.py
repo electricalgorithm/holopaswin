@@ -19,7 +19,7 @@ from holopaswin.evaluation.benchmark import synchronize
 from holopaswin.evaluation.metrics import background_to_signal_ratio
 from holopaswin.evaluation.report import describe
 from holopaswin.evaluation.scoring import write_json
-from holopaswin.models import Geometry, build_model, propagator_of, read_geometry, resolve_model
+from holopaswin.factory import Geometry, build_model, propagator_of, read_geometry, resolve_model
 from holopaswin.training.config import ModelSettings, config_from_dict, config_to_toml
 
 runner: CliRunner = CliRunner()

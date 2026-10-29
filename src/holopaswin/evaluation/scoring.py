@@ -24,7 +24,7 @@ from torch.utils.data import DataLoader, Subset
 
 from holopaswin.dataset import MICROMETER, HoloDataset
 from holopaswin.evaluation.metrics import compute_all_metrics
-from holopaswin.models import BASELINES, Geometry
+from holopaswin.factory import BASELINES, Geometry
 from holopaswin.propagator import AngularSpectrumPropagator
 
 # Back-propagation at the nominal distance, and at the true distance as an oracle.

@@ -15,7 +15,7 @@ from skimage.metrics import structural_similarity as ssim
 
 # Default ranges for holography domain
 PHASE_DATA_RANGE = 2 * np.pi  # Phase in [-pi, pi]
-AMPLITUDE_DATA_RANGE = 1.2  # Object amplitude typically < 1.2
+AMPLITUDE_DATA_RANGE = 1.0  # A passive object transmits at most the illumination: |O| <= 1
 BG_THRESHOLD = 0.98  # Background is where GT amplitude > threshold
 
 
@@ -114,7 +114,7 @@ def amplitude_mse(pred_amp: np.ndarray, gt_amp: np.ndarray) -> float:
 def amplitude_psnr(pred_amp: np.ndarray, gt_amp: np.ndarray) -> float:
     """Compute PSNR for amplitude images.
 
-    PSNR = 10 log10(1.2^2 / amplitude_mse); 1.2 bounds the object amplitude.
+    PSNR = 10 log10(1 / amplitude_mse); 1 is the largest amplitude of a passive object.
 
     Args:
         pred_amp: Predicted amplitude array.

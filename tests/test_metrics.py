@@ -16,7 +16,6 @@ from holo_fixtures import write_dataset
 from torch import nn
 
 from holopaswin.evaluation.metrics import (
-    AMPLITUDE_DATA_RANGE,
     PHASE_DATA_RANGE,
     amplitude_mse,
     amplitude_psnr,
@@ -139,29 +138,32 @@ def test_phase_psnr_of_a_constant_offset(offset: float) -> None:
 
 @pytest.mark.parametrize("offset", [0.01, 0.1, 0.5])
 def test_amplitude_psnr_of_a_constant_offset(offset: float) -> None:
-    """An offset d everywhere has MSE d^2, so PSNR = 10 log10(1.2^2 / d^2).
+    """An offset d everywhere has MSE d^2, so PSNR = 10 log10(1 / d^2) = -20 log10(d).
+
+    The peak is 1, the largest amplitude of a passive object, so an offset of
+    0.1 gives exactly 20 dB.
 
     Args:
         offset (float): Constant amplitude error.
     """
     amplitude: npt.NDArray[np.float64] = np.abs(cell_field())
-    expected: float = 10 * math.log10(AMPLITUDE_DATA_RANGE**2 / offset**2)
+    expected: float = -20 * math.log10(offset)
     assert amplitude_psnr(amplitude + offset, amplitude) == pytest.approx(expected, rel=1e-9)
 
 
-def test_doubled_amplitude_gives_an_amplitude_psnr_near_1_6_db() -> None:
-    """Doubling a field of background 1 gives an amplitude MSE near 1, about 1.6 dB.
+def test_doubled_amplitude_gives_an_amplitude_psnr_near_0_db() -> None:
+    """Doubling a field of background 1 gives an amplitude MSE of mean(A^2), close to the peak of 1, so about 0 dB.
 
     The phase is untouched, so its PSNR stays infinite. An amplitude PSNR near
-    1.6 dB next to a high phase PSNR therefore points to a global amplitude scale
+    0 dB next to a high phase PSNR therefore points to a global amplitude scale
     of about 2 between prediction and truth, such as a network output that adds
     the back-propagated field to a field that already contains it.
     """
     truth: npt.NDArray[np.complex128] = cell_field()
     doubled: dict[str, float] = metrics_of(2 * truth, truth)
     mse: float = float(np.mean(np.abs(truth) ** 2))
-    assert doubled["amp_psnr"] == pytest.approx(10 * math.log10(AMPLITUDE_DATA_RANGE**2 / mse), rel=1e-9)
-    assert 1.5 < doubled["amp_psnr"] < 1.7
+    assert doubled["amp_psnr"] == pytest.approx(-10 * math.log10(mse), rel=1e-9)
+    assert 0 < doubled["amp_psnr"] < 0.5
     assert math.isinf(doubled["phase_psnr"])
 
 
@@ -423,7 +425,7 @@ def test_score_batch_keeps_samples_apart() -> None:
     prediction: torch.Tensor = torch.cat([as_batch(truth), as_batch(2 * truth)])
     rows: list[dict[str, float | str]] = score_batch("method", prediction, target)
     assert math.isinf(float(rows[0]["amp_psnr"]))
-    assert 1.5 < float(rows[1]["amp_psnr"]) < 1.7
+    assert 0 < float(rows[1]["amp_psnr"]) < 0.5
 
 
 @pytest.mark.parametrize("scale", [0.8, 1.2, 2.0])

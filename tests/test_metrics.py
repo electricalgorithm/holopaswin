@@ -127,7 +127,11 @@ def test_psnr_of_identical_images_is_infinite() -> None:
 
 @pytest.mark.parametrize("offset", [0.01, 0.1, 0.5])
 def test_phase_psnr_of_a_constant_offset(offset: float) -> None:
-    """An offset d everywhere has MSE d^2, so PSNR = 10 log10((2 pi)^2 / d^2)."""
+    """An offset d everywhere has MSE d^2, so PSNR = 10 log10((2 pi)^2 / d^2).
+
+    Args:
+        offset (float): Constant phase error in rad.
+    """
     phase: npt.NDArray[np.float64] = np.angle(cell_field()).astype(np.float64)
     expected: float = 10 * math.log10(PHASE_DATA_RANGE**2 / offset**2)
     assert phase_psnr(phase + offset, phase) == pytest.approx(expected, rel=1e-9)
@@ -135,7 +139,11 @@ def test_phase_psnr_of_a_constant_offset(offset: float) -> None:
 
 @pytest.mark.parametrize("offset", [0.01, 0.1, 0.5])
 def test_amplitude_psnr_of_a_constant_offset(offset: float) -> None:
-    """An offset d everywhere has MSE d^2, so PSNR = 10 log10(1.2^2 / d^2)."""
+    """An offset d everywhere has MSE d^2, so PSNR = 10 log10(1.2^2 / d^2).
+
+    Args:
+        offset (float): Constant amplitude error.
+    """
     amplitude: npt.NDArray[np.float64] = np.abs(cell_field())
     expected: float = 10 * math.log10(AMPLITUDE_DATA_RANGE**2 / offset**2)
     assert amplitude_psnr(amplitude + offset, amplitude) == pytest.approx(expected, rel=1e-9)
@@ -268,11 +276,11 @@ def test_complex_mse_sees_a_global_phase() -> None:
     """Unlike the amplitude metrics, complex MSE punishes a constant phase: |e^(i a) - 1|^2 = 2 - 2 cos a."""
     truth: npt.NDArray[np.complex128] = np.ones((SIZE, SIZE), dtype=np.complex128)
     angle: float = 0.5
-    value: float = complex_mse(*_parts(truth * np.exp(1j * angle)), *_parts(truth))
+    value: float = complex_mse(*real_and_imaginary(truth * np.exp(1j * angle)), *real_and_imaginary(truth))
     assert value == pytest.approx(2 - 2 * math.cos(angle), rel=1e-12)
 
 
-def _parts(field: npt.NDArray[np.complex128]) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+def real_and_imaginary(field: npt.NDArray[np.complex128]) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
     """Split a complex field into its real and imaginary parts.
 
     Args:
@@ -403,6 +411,7 @@ def test_score_batch_matches_compute_all_metrics() -> None:
     assert len(rows) == 1
     assert rows[0]["method"] == "method"
     name: str
+    value: float
     for name, value in expected.items():
         assert rows[0][name] == pytest.approx(value, rel=1e-6), name
 
@@ -519,7 +528,7 @@ def test_diagnostics_are_not_summarised_as_metrics() -> None:
     assert {"amp_psnr", "phase_psnr", "freq_ssim", "bs_ratio", "amp_mse", "phase_mse"} <= set(columns)
 
 
-class _Doubled(nn.Module):
+class DoubledBackPropagation(nn.Module):
     """Back-propagation with its amplitude doubled, a method on the wrong scale."""
 
     def __init__(self, propagator: AngularSpectrumPropagator) -> None:
@@ -558,9 +567,9 @@ def test_evaluate_set_stops_on_a_method_with_the_wrong_scale(tmp_path: pathlib.P
     table: pd.DataFrame = evaluate_set(tmp_path / "set", {}, propagator)
     assert set(table["method"]) == set(REFERENCES)
     with pytest.raises(ValueError, match="doubled"):
-        evaluate_set(tmp_path / "set", {"doubled": _Doubled(propagator)}, propagator)
+        evaluate_set(tmp_path / "set", {"doubled": DoubledBackPropagation(propagator)}, propagator)
     unchecked: pd.DataFrame = evaluate_set(
-        tmp_path / "set", {"doubled": _Doubled(propagator)}, propagator, background_tolerance=None
+        tmp_path / "set", {"doubled": DoubledBackPropagation(propagator)}, propagator, background_tolerance=None
     )
     assert unchecked[unchecked["method"] == "doubled"]["bg_amp_ratio"].median() == pytest.approx(2.0, rel=0.05)
 
@@ -576,7 +585,7 @@ def test_evaluate_set_rejects_a_method_named_like_a_reference(tmp_path: pathlib.
     write_dataset(tmp_path / "set")
     propagator: AngularSpectrumPropagator = build_propagator(read_geometry(tmp_path / "set"))
     with pytest.raises(ValueError, match=name):
-        evaluate_set(tmp_path / "set", {name: _Doubled(propagator)}, propagator)
+        evaluate_set(tmp_path / "set", {name: DoubledBackPropagation(propagator)}, propagator)
 
 
 def test_back_propagation_of_a_flat_hologram_is_the_flat_field() -> None:

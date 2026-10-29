@@ -499,6 +499,24 @@ def test_background_check_of_a_small_set_happens_at_the_end() -> None:
         check.finish()
 
 
+def test_background_check_rechecks_the_whole_set_at_the_end() -> None:
+    """A scale error in the later samples passes the warm-up but not the median over the whole set."""
+    check: BackgroundCheck = BackgroundCheck()
+    check.add(ratio_rows("late", [1.0] * BACKGROUND_WARMUP))
+    check.add(ratio_rows("late", [2.0] * (BACKGROUND_WARMUP + 8)))
+    with pytest.raises(ValueError, match=f"late.*of {2 * BACKGROUND_WARMUP + 8} samples"):
+        check.finish()
+
+
+def test_background_check_warns_once_for_a_method_without_background() -> None:
+    """The warm-up and the final check see the same missing background, but report it once."""
+    check: BackgroundCheck = BackgroundCheck()
+    check.add(ratio_rows("blind", [float("nan")] * (BACKGROUND_WARMUP + 4)))
+    with pytest.warns(RuntimeWarning, match="not checked") as warned:
+        check.finish()
+    assert len(warned) == 1
+
+
 def test_background_check_leaves_the_references_alone() -> None:
     """Back-propagation is what the methods are compared against, not a method under test."""
     check: BackgroundCheck = BackgroundCheck()
@@ -563,6 +581,20 @@ def test_evaluate_set_stops_on_a_method_with_the_wrong_scale(tmp_path: pathlib.P
         tmp_path / "set", {"doubled": _Doubled(propagator)}, propagator, background_tolerance=None
     )
     assert unchecked[unchecked["method"] == "doubled"]["bg_amp_ratio"].median() == pytest.approx(2.0, rel=0.05)
+
+
+@pytest.mark.parametrize("name", REFERENCES)
+def test_evaluate_set_rejects_a_method_named_like_a_reference(tmp_path: pathlib.Path, name: str) -> None:
+    """A method under a reference's name would skip the background check and mix with the reference rows.
+
+    Args:
+        tmp_path (pathlib.Path): Folder for the dataset.
+        name (str): Name of a reference.
+    """
+    write_dataset(tmp_path / "set")
+    propagator: AngularSpectrumPropagator = build_propagator(read_geometry(tmp_path / "set"))
+    with pytest.raises(ValueError, match=name):
+        evaluate_set(tmp_path / "set", {name: _Doubled(propagator)}, propagator)
 
 
 def test_back_propagation_of_a_flat_hologram_is_the_flat_field() -> None:

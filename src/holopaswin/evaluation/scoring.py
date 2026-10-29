@@ -180,7 +180,7 @@ def score_batch(method: str, prediction: torch.Tensor, target: torch.Tensor) -> 
     return rows
 
 
-def check_background(method: str, rows: list[dict[str, float | str]], tolerance: float) -> None:
+def check_background(method: str, rows: list[dict[str, float | str]], tolerance: float, *, warn: bool = True) -> None:
     """Stop when a method reconstructs on a different amplitude scale than the truth.
 
     A global amplitude scale leaves the phase metrics and the B/S ratio
@@ -193,12 +193,15 @@ def check_background(method: str, rows: list[dict[str, float | str]], tolerance:
         method (str): Name of the method, for the message.
         rows (list[dict[str, float | str]]): Scored rows of the method, from score_batch.
         tolerance (float): Largest accepted distance of the median ratio from 1.
+        warn (bool): Whether to warn when no row has a background.
 
     Raises:
         ValueError: If the median ratio is further than the tolerance from 1.
     """
     ratios: list[float] = [float(row["bg_amp_ratio"]) for row in rows if math.isfinite(float(row["bg_amp_ratio"]))]
     if not ratios:
+        if not warn:
+            return
         warnings.warn(
             f"None of the {len(rows)} samples of {method} has a background, so its amplitude scale is not checked.",
             RuntimeWarning,
@@ -216,12 +219,14 @@ def check_background(method: str, rows: list[dict[str, float | str]], tolerance:
 
 
 class BackgroundCheck:
-    """Check the amplitude scale of each method once, on its first samples.
+    """Check the amplitude scale of each method early on its first samples, and again on all of them.
 
-    Rows are collected per method until BACKGROUND_WARMUP samples are in, then
-    check_background runs on them; a method with fewer samples is checked by
-    finish. The back-propagation references are what the methods are compared
-    against, so they are not checked.
+    Each method is checked on the median of its first BACKGROUND_WARMUP
+    samples as soon as they are in, so a method on the wrong scale stops an
+    evaluation early, and by finish on the median of all its samples, so a
+    scale error in later samples is found too. Only the method and the
+    background ratio of each sample are kept. The back-propagation references
+    are what the methods are compared against, so they are not checked.
     """
 
     def __init__(self, tolerance: float = BACKGROUND_TOLERANCE, warmup: int = BACKGROUND_WARMUP) -> None:
@@ -229,51 +234,43 @@ class BackgroundCheck:
 
         Args:
             tolerance (float): Tolerance of check_background.
-            warmup (int): Samples of a method to collect before its check.
+            warmup (int): Samples of a method to collect before its early check.
         """
         self.tolerance: float = tolerance
         self.warmup: int = warmup
-        self.pending: dict[str, list[dict[str, float | str]]] = {}
-        self.checked: set[str] = set()
+        self.ratios: dict[str, list[dict[str, float | str]]] = {}
 
     def add(self, rows: list[dict[str, float | str]]) -> None:
-        """Collect scored rows and check every method whose warm-up is full.
+        """Collect scored rows and check every method whose warm-up has just filled.
+
+        A method without any background sample is reported by finish, not here.
 
         Args:
             rows (list[dict[str, float | str]]): Scored rows, from score_batch.
 
         Raises:
-            ValueError: If a method fails check_background.
+            ValueError: If a method fails check_background on its warm-up.
         """
         row: dict[str, float | str]
         for row in rows:
             method: str = str(row["method"])
-            if method in REFERENCES or method in self.checked:
+            if method in REFERENCES:
                 continue
-            collected: list[dict[str, float | str]] = self.pending.setdefault(method, [])
-            collected.append(row)
-            if len(collected) >= self.warmup:
-                self._check(method)
+            collected: list[dict[str, float | str]] = self.ratios.setdefault(method, [])
+            collected.append({"method": method, "bg_amp_ratio": row["bg_amp_ratio"]})
+            if len(collected) == self.warmup:
+                check_background(method, collected, self.tolerance, warn=False)
 
     def finish(self) -> None:
-        """Check every method that has fewer samples than the warm-up.
+        """Check every method on the median of all its samples.
 
         Raises:
             ValueError: If a method fails check_background.
         """
         method: str
-        for method in list(self.pending):
-            self._check(method)
-
-    def _check(self, method: str) -> None:
-        """Check one method on its collected rows and stop collecting for it.
-
-        Args:
-            method (str): Name of the method.
-        """
-        rows: list[dict[str, float | str]] = self.pending.pop(method)
-        self.checked.add(method)
-        check_background(method, rows, self.tolerance)
+        collected: list[dict[str, float | str]]
+        for method, collected in self.ratios.items():
+            check_background(method, collected, self.tolerance)
 
 
 def evaluate_set(  # noqa: PLR0913
@@ -288,7 +285,8 @@ def evaluate_set(  # noqa: PLR0913
     """Reconstruct one test set with every method and score every hologram.
 
     Every method passes a BackgroundCheck, so an evaluation on the wrong
-    amplitude scale stops after the method's first BACKGROUND_WARMUP samples.
+    amplitude scale stops after the method's first BACKGROUND_WARMUP samples,
+    or at the end of the set when only its later samples are on the wrong scale.
 
     Args:
         folder (Path): hologen dataset folder.
@@ -307,8 +305,12 @@ def evaluate_set(  # noqa: PLR0913
             z_true_um, object_family, config_name and one column per metric.
 
     Raises:
-        ValueError: If a method fails the BackgroundCheck.
+        ValueError: If a method is named like a reference, or fails the BackgroundCheck.
     """
+    clashes: list[str] = [name for name in methods if name in REFERENCES]
+    if clashes:
+        msg: str = f"Methods {clashes} have the names of back-propagation references; rename them."
+        raise ValueError(msg)
     check: BackgroundCheck | None = None if background_tolerance is None else BackgroundCheck(background_tolerance)
     size: int = propagator.shape[0]
     device: torch.device = propagator.H.device

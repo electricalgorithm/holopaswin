@@ -27,7 +27,14 @@ import torch
 from torch import nn
 
 from holopaswin.dataset import read_recipe_geometry
-from holopaswin.evaluation.scoring import REFERENCES, build_propagator, evaluate_set, metric_columns, write_json
+from holopaswin.evaluation.scoring import (
+    BACKGROUND_TOLERANCE,
+    REFERENCES,
+    build_propagator,
+    evaluate_set,
+    metric_columns,
+    write_json,
+)
 from holopaswin.evaluation.statistics import bootstrap_median, paired_tests
 from holopaswin.models import Geometry, read_geometry, resolve_model
 
@@ -130,6 +137,12 @@ def run_sweep(
 ) -> pd.DataFrame:
     """Reconstruct and score every sweep set with every method.
 
+    Only the set nearest the nominal distance passes the background check,
+    and it is reconstructed first. A wrong normalisation or output scale
+    shows at every offset, so this set finds it before the others are
+    reconstructed, while a method whose background changes with defocus
+    does not stop the sweep that measures it.
+
     Args:
         sweep_root (Path): Folder with one hologen dataset per offset.
         runs (dict[str, Path]): Run folder or checkpoint by model name.
@@ -145,14 +158,18 @@ def run_sweep(
     geometry: Geometry = read_geometry(sets[0][1])
     models: dict[str, nn.Module] = {name: resolve_model(path, geometry, device) for name, path in runs.items()}
     propagator: AngularSpectrumPropagator = build_propagator(geometry).to(device)
-    tables: list[pd.DataFrame] = []
-    offset: float
-    folder: Path
-    for offset, folder, _ in sets:
-        table: pd.DataFrame = evaluate_set(folder, models, propagator, REFERENCES, batch_size, limit)
+    nearest: int = min(range(len(sets)), key=lambda position: abs(sets[position][0]))
+    tables: dict[int, pd.DataFrame] = {}
+    position: int
+    for position in [nearest, *(other for other in range(len(sets)) if other != nearest)]:
+        offset: float = sets[position][0]
+        tolerance: float | None = BACKGROUND_TOLERANCE if position == nearest else None
+        table: pd.DataFrame = evaluate_set(
+            sets[position][1], models, propagator, REFERENCES, batch_size, limit, background_tolerance=tolerance
+        )
         table.insert(1, "offset_um", offset)
-        tables.append(table)
-    return pd.concat(tables, ignore_index=True)
+        tables[position] = table
+    return pd.concat([tables[position] for position in range(len(sets))], ignore_index=True)
 
 
 def plot_sweep(table: pd.DataFrame, metrics: list[str], methods: list[str], train_error: float, path: Path) -> None:

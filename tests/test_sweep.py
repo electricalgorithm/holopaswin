@@ -1,13 +1,60 @@
 """Tests for finding the sweep sets and summarising the distance sweep."""
 
 import pathlib
+from typing import Any
 
 import numpy as np
 import pandas as pd
 import pytest
+import torch
+from holo_fixtures import write_dataset
 
+from holopaswin.evaluation import sweep
+from holopaswin.evaluation.scoring import BACKGROUND_TOLERANCE
 from holopaswin.evaluation.statistics import bootstrap_median, holm, paired_tests
 from holopaswin.evaluation.sweep import find_sweep_sets, summarise
+
+
+def test_only_the_set_nearest_the_nominal_distance_checks_the_scale(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Defocus may change a method's background, so only the set nearest dz = 0 is checked, and first.
+
+    A wrong normalisation or output scale shows at every offset, so one check
+    finds it; checking every set would stop a sweep on the physics it measures
+    and lose the sets already reconstructed.
+
+    Args:
+        tmp_path (pathlib.Path): Folder for the sweep sets.
+        monkeypatch (pytest.MonkeyPatch): Replaces the reconstruction by a recorder.
+    """
+    offset: float
+    for offset in (-10.0, -2.0, 3.0, 8.0):
+        write_dataset(tmp_path / f"offset_{offset:+.0f}", offset)
+    calls: list[tuple[str, float | None]] = []
+
+    def record(folder: pathlib.Path, *args: Any, background_tolerance: float | None, **kwargs: Any) -> pd.DataFrame:  # noqa: ANN401
+        """Record the set and its tolerance instead of reconstructing it.
+
+        Args:
+            folder (pathlib.Path): The sweep set.
+            *args (Any): Ignored positional arguments of evaluate_set.
+            background_tolerance (float | None): Tolerance of the background check.
+            **kwargs (Any): Ignored keyword arguments of evaluate_set.
+
+        Returns:
+            pd.DataFrame: One row naming the set.
+        """
+        del args, kwargs
+        calls.append((folder.name, background_tolerance))
+        return pd.DataFrame({"method": ["m"], "index": [0], "set": [folder.name]})
+
+    monkeypatch.setattr(sweep, "evaluate_set", record)
+    table: pd.DataFrame = sweep.run_sweep(tmp_path, {}, torch.device("cpu"), batch_size=2, limit=None)
+    assert calls[0] == ("offset_-2", BACKGROUND_TOLERANCE)
+    assert sorted(calls[1:]) == [("offset_+3", None), ("offset_+8", None), ("offset_-10", None)]
+    assert list(table["offset_um"]) == [-10.0, -2.0, 3.0, 8.0]
+    assert list(table["set"]) == ["offset_-10", "offset_-2", "offset_+3", "offset_+8"]
 
 
 def write_recipe(folder: pathlib.Path, offset: float, error: float = 0.0, resolution: int = 64) -> None:

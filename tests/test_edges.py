@@ -33,7 +33,6 @@ runner: CliRunner = CliRunner()
         (["figure", "{data}", "--samples", "0", "-b", "asm", "--zoom", "50,50,30"], "does not fit"),
         (["figure", "{data}", "--samples", "0"], "at least one --model or --baseline"),
         (["evaluate", "{data}", "-b", "asm", "-b", "asm"], "must not repeat"),
-        (["benchmark", "--architecture", "unet", "-m", "{data}", "--data", "{data}"], "either --model or"),
     ],
 )
 def test_bad_options_are_a_clear_error(tmp_path: pathlib.Path, arguments: list[str], message: str) -> None:
@@ -53,18 +52,32 @@ def test_config_prints_when_no_file_is_given() -> None:
     assert result.output.startswith("# holopaswin training configuration")
 
 
-def test_benchmark_without_data_times_the_model_only(tmp_path: pathlib.Path) -> None:
-    """A run folder carries its own geometry, so --data is optional."""
+def test_benchmark_times_a_run_folder_under_its_name(tmp_path: pathlib.Path) -> None:
+    """A trained run folder is timed as NAME=RUN on the test set, like holopaswin evaluate takes it."""
     write_dataset(tmp_path / "run")
     (tmp_path / "run" / "config.toml").write_text(config_to_toml(config_from_dict({"model": {"architecture": "unet"}})))
     model: nn.Module = build_model(ModelSettings(architecture="unet"), read_geometry(tmp_path / "run"))
     torch.save(model.state_dict(), tmp_path / "run" / "model.pth")
     output: pathlib.Path = tmp_path / "timings" / "benchmark.json"
     result: Result = runner.invoke(
-        app, ["benchmark", "-m", str(tmp_path / "run"), "--iterations", "1", "--warmup", "0", "-o", str(output)]
+        app,
+        [
+            "benchmark",
+            str(tmp_path / "run"),
+            "-m",
+            f"trained={tmp_path / 'run'}",
+            "--iterations",
+            "1",
+            "--warmup",
+            "0",
+            "-o",
+            str(output),
+            "--device",
+            "cpu",
+        ],
     )
     assert result.exit_code == 0, result.output
-    assert "end_to_end" not in json.loads(output.read_text())
+    assert list(json.loads(output.read_text())["methods"]) == ["trained"]
 
 
 def test_a_matching_run_folder_is_loaded(tmp_path: pathlib.Path) -> None:

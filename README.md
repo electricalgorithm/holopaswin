@@ -103,10 +103,10 @@ Every hologram is scored with the metrics of the paper's tables. `summary.json` 
 
 ```bash
 uv run holopaswin figure ../hologen/test --samples 0,5,9 --model holopaswin=runs/holopaswin --baseline asm --error --zoom 80,80,48
-uv run holopaswin benchmark --model runs/holopaswin --data ../hologen/test --batch-size 1 --batch-size 16
+uv run holopaswin benchmark ../hologen/test --model holopaswin=runs/holopaswin --architecture unet --baseline asm --baseline lf100 --batch-size 1 --batch-size 16
 ```
 
-`figure` draws the hologram, the phase of every method and the true phase per sample on one colour scale. `benchmark` times the network alone per batch size and, with `--data`, the whole path from a stored hologram (reading, normalising, reconstructing).
+`figure` draws the hologram, the phase of every method and the true phase per sample on one colour scale. `benchmark` times every method with one protocol: on the same holograms of the test set, on one device, for the same batch sizes and after the same warm-up, from the normalised hologram on the device to the reconstructed field. It also times the whole path from a stored hologram (reading, normalising, reconstructing). `benchmark.json` records the protocol next to the timings and the parameter count of each method. Untrained networks (`--architecture`) take as long as trained ones.
 
 ### Distance sweep
 

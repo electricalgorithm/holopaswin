@@ -339,24 +339,40 @@ def figure(  # noqa: PLR0913 (one argument per command-line option)
 
 @app.command()
 def benchmark(  # noqa: PLR0913 (one argument per command-line option)
-    model: Annotated[
-        pathlib.Path | None,
-        typer.Option("--model", "-m", help="Run folder of holopaswin train, or a HoloPASWIN checkpoint with --data."),
-    ] = None,
-    architecture: Annotated[
-        str | None,
-        typer.Option(help="Time an untrained network instead: holopaswin, unet, resnet_unet or hrnet. Needs --data."),
-    ] = None,
-    data: Annotated[
-        pathlib.Path | None,
-        typer.Option(
-            help="hologen dataset; gives the geometry and adds the end-to-end timing from stored holograms.",
+    test_dir: Annotated[
+        pathlib.Path,
+        typer.Argument(
+            help="hologen test set; gives the geometry, the timed holograms and the stored frames.",
             exists=True,
             file_okay=False,
         ),
+    ],
+    model: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--model",
+            "-m",
+            help="Model to time as NAME=RUN, where RUN is a run folder of holopaswin train or a HoloPASWIN "
+            "checkpoint; repeat for several.",
+        ),
+    ] = None,
+    architecture: Annotated[
+        list[str] | None,
+        typer.Option(
+            help="Untrained network to time: holopaswin, unet, resnet_unet or hrnet; repeat for several.",
+        ),
+    ] = None,
+    baseline: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--baseline",
+            "-b",
+            help="Classical reconstruction to time, any baseline of holopaswin evaluate; repeat for several.",
+        ),
     ] = None,
     batch_size: Annotated[
-        list[int] | None, typer.Option("--batch-size", help="Batch size to time; repeat for several. (default: 1)")
+        list[int] | None,
+        typer.Option("--batch-size", help="Batch size to time; repeat for several. (default: 1)", min=1),
     ] = None,
     iterations: Annotated[int, typer.Option(help="Timed passes per batch size.", min=1)] = 100,
     warmup: Annotated[int, typer.Option(help="Untimed passes before timing.", min=0)] = 10,
@@ -368,17 +384,19 @@ def benchmark(  # noqa: PLR0913 (one argument per command-line option)
         typer.Option(help="Torch device, e.g. cpu or cuda. (default: CUDA, then MPS, then CPU)"),
     ] = None,
 ) -> None:
-    """Time the network alone and the whole path from a stored hologram.
+    """Time networks and classical reconstructions with one protocol.
 
-    The network is timed per batch size with the device synchronised, after a
-    warm-up. With --data, reading, normalising and reconstructing stored
-    holograms one by one is timed too.
+    Every method is timed on the same holograms of the test set, on one device,
+    for the same batch sizes and after the same warm-up, from the normalised
+    hologram on the device to the reconstructed field. Reading, normalising and
+    reconstructing stored frames one by one is timed too.
 
     \f
     Args:
-        model (pathlib.Path | None): Run folder or checkpoint, or None.
-        architecture (str | None): Untrained network to time, or None.
-        data (pathlib.Path | None): Dataset for the geometry and end-to-end timing.
+        test_dir (pathlib.Path): Test set for the geometry, holograms and frames.
+        model (list[str] | None): NAME=RUN specifications.
+        architecture (list[str] | None): Untrained networks to time.
+        baseline (list[str] | None): Classical reconstructions to time.
         batch_size (list[int] | None): Batch sizes, or None for 1.
         iterations (int): Timed passes per batch size.
         warmup (int): Untimed passes.
@@ -386,29 +404,40 @@ def benchmark(  # noqa: PLR0913 (one argument per command-line option)
         device (str | None): Torch device name, or None to choose one.
 
     Raises:
-        typer.Exit: With code 2 if the model or its geometry cannot be determined.
+        typer.Exit: With code 2 if no method is given or a method is invalid.
     """  # noqa: D301 (typer hides the text after the form feed from --help)
     import json  # noqa: PLC0415
 
     from holopaswin.evaluation.benchmark import run_benchmark  # noqa: PLC0415
+    from holopaswin.evaluation.scoring import parse_model_specs  # noqa: PLC0415
 
     try:
+        runs: dict[str, pathlib.Path] = parse_model_specs(model or [])
         report: dict[str, Any] = run_benchmark(
-            model, architecture, data, batch_size or [1], iterations, warmup, select_device(device)
+            test_dir,
+            runs,
+            architecture or [],
+            baseline or [],
+            batch_size or [1],
+            iterations,
+            warmup,
+            select_device(device),
         )
     except (ValueError, FileNotFoundError) as error:
         typer.echo(f"Error: {error}", err=True)
         raise typer.Exit(code=2) from error
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(report, indent=2))
-    row: dict[str, float]
-    for row in report["model"]:
-        typer.echo(
-            f"batch {int(row['batch_size'])}: latency {row['latency_ms']:.1f} ms, "
-            f"{row['holograms_per_second']:.1f} holograms/s"
-        )
-    if "end_to_end" in report:
-        typer.echo(f"end to end: {report['end_to_end']['total_ms']:.1f} ms per hologram")
+    name: str
+    timing: dict[str, Any]
+    for name, timing in report["methods"].items():
+        row: dict[str, float]
+        for row in timing["model"]:
+            typer.echo(
+                f"{name}, batch {int(row['batch_size'])}: {row['latency_ms']:.1f} ms, "
+                f"{row['holograms_per_second']:.1f} holograms/s"
+            )
+        typer.echo(f"{name}, end to end: {timing['end_to_end']['total_ms']:.1f} ms per hologram")
     typer.echo(f"Timings saved to {output}")
 
 

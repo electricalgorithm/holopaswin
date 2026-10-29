@@ -21,7 +21,7 @@ from holopaswin.baselines.latychevskaia_fink import LatychevskaiaFink
 from holopaswin.baselines.total_variation import ConstrainedComplexTV
 from holopaswin.baselines.unet_baseline import UNetBaseline
 from holopaswin.dataset import MICROMETER, read_recipe_geometry
-from holopaswin.model import WIRING_VERSION, HoloPASWIN
+from holopaswin.model import HoloPASWIN
 from holopaswin.propagator import AngularSpectrumPropagator
 from holopaswin.resnet_unet import ResNetUNet
 from holopaswin.training.config import ARCHITECTURES, ModelSettings, TrainingConfig, load_config
@@ -263,11 +263,7 @@ def propagator_of(model: nn.Module) -> AngularSpectrumPropagator:
 
 
 def load_weights(model: nn.Module, path: Path, device: torch.device) -> None:
-    """Load trained weights into a model, refusing HoloPASWIN weights of another skip wiring.
-
-    The skips around the Swin U-Net have no weights, so weights trained with
-    another wiring would load without error and reconstruct the wrong field;
-    only the stored wiring version tells them apart.
+    """Load trained weights from a file into a model, naming the file when they are refused.
 
     Args:
         model (nn.Module): The built model.
@@ -275,20 +271,15 @@ def load_weights(model: nn.Module, path: Path, device: torch.device) -> None:
         device (torch.device): Device to load the weights on.
 
     Raises:
-        ValueError: If HoloPASWIN weights lack the current wiring version.
+        ValueError: If the model refuses the weights, such as HoloPASWIN weights
+            of another skip wiring.
     """
     state: dict[str, torch.Tensor] = torch.load(path, map_location=device, weights_only=True)
-    if isinstance(model, HoloPASWIN):
-        stored: torch.Tensor | None = state.get("wiring_version")
-        if stored is None or int(stored) != WIRING_VERSION:
-            found: str = "no wiring version" if stored is None else f"wiring version {int(stored)}"
-            msg: str = (
-                f"{path} has {found}, but HoloPASWIN now has skip wiring {WIRING_VERSION}: the "
-                "back-propagated field is added once, in residual mode only. Its weights would "
-                "reconstruct the wrong field, so retrain the model."
-            )
-            raise ValueError(msg)
-    model.load_state_dict(state)
+    try:
+        model.load_state_dict(state)
+    except ValueError as error:
+        msg: str = f"{path}: {error}"
+        raise ValueError(msg) from error
 
 
 def load_run(folder: Path, device: torch.device) -> nn.Module:

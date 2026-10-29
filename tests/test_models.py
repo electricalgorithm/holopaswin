@@ -382,6 +382,41 @@ def test_a_checkpoint_of_another_skip_wiring_is_rejected(tmp_path: pathlib.Path,
         load_run(tmp_path / "run", torch.device("cpu"))
 
 
+@pytest.mark.parametrize("strict", [True, False])
+@pytest.mark.parametrize("version", [None, WIRING_VERSION - 1, WIRING_VERSION + 1])
+def test_holopaswin_refuses_weights_of_another_skip_wiring(version: int | None, strict: bool) -> None:
+    """Every way of loading weights into HoloPASWIN checks the wiring, not only load_run and resolve_model.
+
+    Without the check, a strict load would copy another version into the
+    buffer without error, and a non-strict load would accept weights without it.
+
+    Args:
+        version (int | None): Stored wiring version, or None to leave it out.
+        strict (bool): Strictness of load_state_dict.
+    """
+    source: HoloPASWIN = HoloPASWIN(*GEOMETRY, use_pretrained=False)
+    state: dict[str, torch.Tensor] = source.state_dict()
+    if version is None:
+        del state["wiring_version"]
+    else:
+        state["wiring_version"] = torch.tensor(version)
+    target: HoloPASWIN = HoloPASWIN(*GEOMETRY, use_pretrained=False)
+    with pytest.raises(ValueError, match="skip wiring"):
+        target.load_state_dict(state, strict=strict)
+
+
+def test_holopaswin_loads_its_own_weights() -> None:
+    """Weights of the current wiring load into a fresh model unchanged."""
+    torch.manual_seed(1)
+    source: HoloPASWIN = HoloPASWIN(*GEOMETRY, use_pretrained=False)
+    target: HoloPASWIN = HoloPASWIN(*GEOMETRY, use_pretrained=False)
+    target.load_state_dict(source.state_dict())
+    name: str
+    tensor: torch.Tensor
+    for name, tensor in source.state_dict().items():
+        torch.testing.assert_close(target.state_dict()[name], tensor)
+
+
 def test_a_checkpoint_records_the_current_skip_wiring() -> None:
     """New HoloPASWIN weights carry the wiring version they were trained with."""
     model: HoloPASWIN = HoloPASWIN(*GEOMETRY, use_pretrained=False)

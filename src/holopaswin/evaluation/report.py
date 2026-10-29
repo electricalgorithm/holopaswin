@@ -16,7 +16,7 @@ import pandas as pd  # type: ignore[import-untyped]
 import torch
 from torch import nn
 
-from holopaswin.evaluation.scoring import IDENTIFIERS, build_propagator, evaluate_set, write_json
+from holopaswin.evaluation.scoring import build_propagator, evaluate_set, metric_columns, write_json
 from holopaswin.evaluation.statistics import bootstrap_median, paired_tests
 from holopaswin.models import Geometry, build_baseline, read_geometry, resolve_model
 
@@ -143,6 +143,6 @@ def write_evaluation(table: pd.DataFrame, methods: list[str], output: Path) -> l
     """
     output.mkdir(parents=True, exist_ok=True)
     table.to_csv(output / "per_sample.csv", index=False)
-    metrics: list[str] = [column for column in table.columns if column not in IDENTIFIERS]
+    metrics: list[str] = metric_columns(list(table.columns))
     write_json(summarise_evaluation(table, metrics, methods), output / "summary.json")
     return metrics

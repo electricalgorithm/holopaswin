@@ -21,7 +21,7 @@ from holopaswin.baselines.latychevskaia_fink import LatychevskaiaFink
 from holopaswin.baselines.total_variation import ConstrainedComplexTV
 from holopaswin.baselines.unet_baseline import UNetBaseline
 from holopaswin.dataset import MICROMETER, read_recipe_geometry
-from holopaswin.model import HoloPASWIN
+from holopaswin.model import WIRING_VERSION, HoloPASWIN
 from holopaswin.propagator import AngularSpectrumPropagator
 from holopaswin.resnet_unet import ResNetUNet
 from holopaswin.training.config import ARCHITECTURES, ModelSettings, TrainingConfig, load_config
@@ -262,6 +262,35 @@ def propagator_of(model: nn.Module) -> AngularSpectrumPropagator:
     return propagator
 
 
+def load_weights(model: nn.Module, path: Path, device: torch.device) -> None:
+    """Load trained weights into a model, refusing HoloPASWIN weights of another skip wiring.
+
+    The skips around the Swin U-Net have no weights, so weights trained with
+    another wiring would load without error and reconstruct the wrong field;
+    only the stored wiring version tells them apart.
+
+    Args:
+        model (nn.Module): The built model.
+        path (Path): The .pth file of its weights.
+        device (torch.device): Device to load the weights on.
+
+    Raises:
+        ValueError: If HoloPASWIN weights lack the current wiring version.
+    """
+    state: dict[str, torch.Tensor] = torch.load(path, map_location=device, weights_only=True)
+    if isinstance(model, HoloPASWIN):
+        stored: torch.Tensor | None = state.get("wiring_version")
+        if stored is None or int(stored) != WIRING_VERSION:
+            found: str = "no wiring version" if stored is None else f"wiring version {int(stored)}"
+            msg: str = (
+                f"{path} has {found}, but HoloPASWIN now has skip wiring {WIRING_VERSION}: the "
+                "back-propagated field is added once, in residual mode only. Its weights would "
+                "reconstruct the wrong field, so retrain the model."
+            )
+            raise ValueError(msg)
+    model.load_state_dict(state)
+
+
 def load_run(folder: Path, device: torch.device) -> nn.Module:
     """Rebuild a trained model from a run folder of holopaswin train.
 
@@ -271,12 +300,15 @@ def load_run(folder: Path, device: torch.device) -> nn.Module:
 
     Returns:
         nn.Module: The model in evaluation mode.
+
+    Raises:
+        ValueError: If the weights are HoloPASWIN weights of another skip wiring.
     """
     config: TrainingConfig = load_config(folder / "config.toml")
     # The trained weights replace any pretrained ones, so nothing is downloaded.
     settings: ModelSettings = dataclasses.replace(config.model, pretrained=False)
     model: nn.Module = build_model(settings, read_geometry(folder)).to(device)
-    model.load_state_dict(torch.load(folder / "model.pth", map_location=device, weights_only=True))
+    load_weights(model, folder / "model.pth", device)
     return model.eval()
 
 
@@ -294,7 +326,8 @@ def resolve_model(path: Path, geometry: Geometry, device: torch.device) -> nn.Mo
         nn.Module: The model in evaluation mode.
 
     Raises:
-        ValueError: If a run folder was trained at another image size than the test sets.
+        ValueError: If a run folder was trained at another image size than the
+            test sets, or the weights are HoloPASWIN weights of another skip wiring.
     """
     if path.is_dir():
         trained: Geometry = read_geometry(path)
@@ -306,5 +339,5 @@ def resolve_model(path: Path, geometry: Geometry, device: torch.device) -> nn.Mo
             raise ValueError(msg)
         return load_run(path, device)
     model: nn.Module = build_model(ModelSettings(pretrained=False), geometry).to(device)
-    model.load_state_dict(torch.load(path, map_location=device, weights_only=True))
+    load_weights(model, path, device)
     return model.eval()

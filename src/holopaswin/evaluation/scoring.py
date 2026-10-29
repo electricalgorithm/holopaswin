@@ -11,6 +11,7 @@ networks are scored as they are.
 
 import json
 import math
+import warnings
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +31,27 @@ from holopaswin.propagator import AngularSpectrumPropagator
 REFERENCES: tuple[str, str] = ("backprop_nominal", "backprop_true_z")
 # Columns of a per-sample table that describe a row instead of scoring it.
 IDENTIFIERS: tuple[str, ...] = ("method", "offset_um", "index", "z_true_um", "object_family", "config_name")
+# Largest accepted distance of a method's median background amplitude ratio from 1.
+# Twin-image ripples move the median by a few percent; a wrong normalisation moves
+# it by tens of percent (dividing a 1489 DN background by 1000 gives 1.22).
+BACKGROUND_TOLERANCE: float = 0.1
+# Samples of a method whose median background ratio is checked; the median of this
+# many tolerates a few hard holograms, and a wrong scale still stops a run early.
+BACKGROUND_WARMUP: int = 32
+# Columns of a per-sample table that check the evaluation instead of scoring a method.
+DIAGNOSTICS: tuple[str, ...] = ("bg_amp_ratio",)
+
+
+def metric_columns(columns: list[str]) -> list[str]:
+    """Select the columns of a per-sample table that score the methods.
+
+    Args:
+        columns (list[str]): Columns of the table, in order.
+
+    Returns:
+        list[str]: The columns that are neither IDENTIFIERS nor DIAGNOSTICS, in order.
+    """
+    return [column for column in columns if column not in IDENTIFIERS and column not in DIAGNOSTICS]
 
 
 def parse_model_specs(specs: list[str]) -> dict[str, Path]:
@@ -158,6 +180,102 @@ def score_batch(method: str, prediction: torch.Tensor, target: torch.Tensor) -> 
     return rows
 
 
+def check_background(method: str, rows: list[dict[str, float | str]], tolerance: float) -> None:
+    """Stop when a method reconstructs on a different amplitude scale than the truth.
+
+    A global amplitude scale leaves the phase metrics and the B/S ratio
+    unchanged, so a wrong normalisation would otherwise only show as a low
+    amplitude PSNR. The median of the background amplitude ratio over the rows
+    must lie within the tolerance of 1; rows without a background are skipped,
+    with a warning when none is left.
+
+    Args:
+        method (str): Name of the method, for the message.
+        rows (list[dict[str, float | str]]): Scored rows of the method, from score_batch.
+        tolerance (float): Largest accepted distance of the median ratio from 1.
+
+    Raises:
+        ValueError: If the median ratio is further than the tolerance from 1.
+    """
+    ratios: list[float] = [float(row["bg_amp_ratio"]) for row in rows if math.isfinite(float(row["bg_amp_ratio"]))]
+    if not ratios:
+        warnings.warn(
+            f"None of the {len(rows)} samples of {method} has a background, so its amplitude scale is not checked.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+        return
+    level: float = float(np.median(ratios))
+    if abs(level - 1) > tolerance:
+        msg: str = (
+            f"{method} reconstructs a background amplitude {level:.3f} times the true one (median of "
+            f"{len(ratios)} of {len(rows)} samples), outside 1 +- {tolerance}; the hologram normalisation or "
+            "the output scale of the method does not match the truth."
+        )
+        raise ValueError(msg)
+
+
+class BackgroundCheck:
+    """Check the amplitude scale of each method once, on its first samples.
+
+    Rows are collected per method until BACKGROUND_WARMUP samples are in, then
+    check_background runs on them; a method with fewer samples is checked by
+    finish. The back-propagation references are what the methods are compared
+    against, so they are not checked.
+    """
+
+    def __init__(self, tolerance: float = BACKGROUND_TOLERANCE, warmup: int = BACKGROUND_WARMUP) -> None:
+        """Start with no rows.
+
+        Args:
+            tolerance (float): Tolerance of check_background.
+            warmup (int): Samples of a method to collect before its check.
+        """
+        self.tolerance: float = tolerance
+        self.warmup: int = warmup
+        self.pending: dict[str, list[dict[str, float | str]]] = {}
+        self.checked: set[str] = set()
+
+    def add(self, rows: list[dict[str, float | str]]) -> None:
+        """Collect scored rows and check every method whose warm-up is full.
+
+        Args:
+            rows (list[dict[str, float | str]]): Scored rows, from score_batch.
+
+        Raises:
+            ValueError: If a method fails check_background.
+        """
+        row: dict[str, float | str]
+        for row in rows:
+            method: str = str(row["method"])
+            if method in REFERENCES or method in self.checked:
+                continue
+            collected: list[dict[str, float | str]] = self.pending.setdefault(method, [])
+            collected.append(row)
+            if len(collected) >= self.warmup:
+                self._check(method)
+
+    def finish(self) -> None:
+        """Check every method that has fewer samples than the warm-up.
+
+        Raises:
+            ValueError: If a method fails check_background.
+        """
+        method: str
+        for method in list(self.pending):
+            self._check(method)
+
+    def _check(self, method: str) -> None:
+        """Check one method on its collected rows and stop collecting for it.
+
+        Args:
+            method (str): Name of the method.
+        """
+        rows: list[dict[str, float | str]] = self.pending.pop(method)
+        self.checked.add(method)
+        check_background(method, rows, self.tolerance)
+
+
 def evaluate_set(  # noqa: PLR0913
     folder: Path,
     methods: dict[str, nn.Module],
@@ -165,8 +283,12 @@ def evaluate_set(  # noqa: PLR0913
     references: tuple[str, ...] = REFERENCES,
     batch_size: int = 4,
     limit: int | None = None,
+    background_tolerance: float | None = BACKGROUND_TOLERANCE,
 ) -> pd.DataFrame:
     """Reconstruct one test set with every method and score every hologram.
+
+    Every method passes a BackgroundCheck, so an evaluation on the wrong
+    amplitude scale stops after the method's first BACKGROUND_WARMUP samples.
 
     Args:
         folder (Path): hologen dataset folder.
@@ -177,11 +299,17 @@ def evaluate_set(  # noqa: PLR0913
         references (tuple[str, ...]): Back-propagation references to add, any of REFERENCES.
         batch_size (int): Holograms per forward pass.
         limit (int | None): Holograms to use from the set, or None for all.
+        background_tolerance (float | None): Tolerance of the BackgroundCheck,
+            or None to score without it.
 
     Returns:
         pd.DataFrame: One row per hologram and method, with method, index,
             z_true_um, object_family, config_name and one column per metric.
+
+    Raises:
+        ValueError: If a method fails the BackgroundCheck.
     """
+    check: BackgroundCheck | None = None if background_tolerance is None else BackgroundCheck(background_tolerance)
     size: int = propagator.shape[0]
     device: torch.device = propagator.H.device
     dataset: HoloDataset = HoloDataset(str(folder), target_size=size, img_dim=size, return_z=True)
@@ -210,6 +338,8 @@ def evaluate_set(  # noqa: PLR0913
                 scored.append(score_batch(name, prediction, target))
             method_rows: list[dict[str, float | str]]
             for method_rows in scored:
+                if check is not None:
+                    check.add(method_rows)
                 position: int
                 row: dict[str, float | str]
                 for position, row in enumerate(method_rows):
@@ -224,6 +354,8 @@ def evaluate_set(  # noqa: PLR0913
                     )
                     rows.append(row)
             first += len(hologram)
+    if check is not None:
+        check.finish()
     return pd.DataFrame(rows)
 
 

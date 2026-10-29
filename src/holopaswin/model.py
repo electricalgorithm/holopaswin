@@ -10,6 +10,11 @@ import torch
 from holopaswin.propagator import AngularSpectrumPropagator
 from holopaswin.swin_transformer import SwinTransformerSys
 
+# How the back-propagated field is added around the Swin U-Net. Weights without a
+# version were trained with a skip inside the Swin U-Net, and in residual mode with a
+# second one in HoloPASWIN; version 2 has only the residual-mode skip.
+WIRING_VERSION: int = 2
+
 
 class HoloPASWIN(torch.nn.Module):
     """Physics-Aware Swin Transformer for holographic reconstruction.
@@ -53,6 +58,9 @@ class HoloPASWIN(torch.nn.Module):
         """
         super().__init__()
         self.residual_mode = residual_mode
+        # Saved with the weights so that weights trained with another number of skips
+        # around the Swin U-Net, which have no weights of their own, cannot load silently.
+        self.register_buffer("wiring_version", torch.tensor(WIRING_VERSION))
         self.propagator = AngularSpectrumPropagator(
             (img_size, img_size), wavelength, pixel_size, z_dist, numerical_aperture=numerical_aperture
         )

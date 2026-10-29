@@ -127,13 +127,9 @@ class SwinTransformerSys(nn.Module):
         d3 = self.decoder_up3(d2)
         d3 = d3 + features_nchw[0]
 
-        # Final restoration to 1/1 resolution
+        # Final restoration to 1/1 resolution. The output is the correction alone.
+        # HoloPASWIN adds the dirty input itself in residual mode, and adding it
+        # here as well would start the network at twice the input amplitude.
         out = self.final_up(d3)
-
-        # Residual Connection:
-        # The network learns the residual (correction) to apply to the dirty input.
-        # This preserves the strong object structure present in the dirty image
-        # while asking the network to subtract the twin image / noise.
-        out = out + x
 
         return out  # type: ignore[no-any-return]

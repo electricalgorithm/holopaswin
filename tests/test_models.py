@@ -11,7 +11,7 @@ from holopaswin.baselines.hrnet import HRNet
 from holopaswin.baselines.latychevskaia_fink import LatychevskaiaFink
 from holopaswin.baselines.total_variation import ConstrainedComplexTV
 from holopaswin.baselines.unet_baseline import UNetBaseline
-from holopaswin.model import HoloPASWIN
+from holopaswin.model import WIRING_VERSION, HoloPASWIN
 from holopaswin.models import (
     ARCHITECTURES,
     BASELINES,
@@ -58,6 +58,48 @@ def test_the_objective_pupil_reaches_every_propagator(cls: type[nn.Module]) -> N
     """Without an NA there is no pupil; with one, the propagator applies it."""
     assert construct(cls, None).propagator.pupil is None
     assert construct(cls, 0.45).propagator.pupil is not None
+
+
+@pytest.mark.parametrize("seed", [0, 1, 2])
+@pytest.mark.parametrize("cls", [UNetBaseline, ResNetUNet, HRNet, HoloPASWIN], ids=lambda cls: cls.__name__)
+def test_an_untrained_network_starts_near_the_back_propagated_scale(cls: type[nn.Module], seed: int) -> None:
+    """A fresh residual network adds a small correction to the input, so a flat field stays near 1.
+
+    Adding the back-propagated field twice would start every network at an
+    amplitude of 2, which training must first undo.
+
+    Args:
+        cls (type[nn.Module]): Network to build.
+        seed (int): Seed of the initial weights.
+    """
+    torch.manual_seed(seed)
+    module: nn.Module = construct(cls, 0.45).eval()
+    with torch.no_grad():
+        clean, _ = module(torch.ones(2, 1, SIZE, SIZE))
+    assert abs(torch.hypot(clean[:, 0], clean[:, 1]).median().item() - 1) < 0.5
+
+
+@pytest.mark.parametrize("residual_mode", [True, False])
+def test_holopaswin_adds_the_back_propagated_field_once(residual_mode: bool) -> None:
+    """With a zero last layer the Swin U-Net predicts no correction.
+
+    The output is then the back-propagated field in residual mode and zero
+    otherwise; any skip inside the Swin U-Net would show as an extra copy.
+
+    Args:
+        residual_mode (bool): Whether the correction is added to the back-propagated field.
+    """
+    torch.manual_seed(0)
+    module: HoloPASWIN = HoloPASWIN(*GEOMETRY, use_pretrained=False, residual_mode=residual_mode).eval()
+    last: nn.Module = module.swin_unet.final_up[-1]
+    assert isinstance(last, nn.Conv2d)
+    assert last.bias is not None
+    nn.init.zeros_(last.weight)
+    nn.init.zeros_(last.bias)
+    hologram: torch.Tensor = torch.rand(1, 1, SIZE, SIZE) + 0.5
+    with torch.no_grad():
+        clean, dirty = module(hologram)
+    torch.testing.assert_close(clean, dirty if residual_mode else torch.zeros_like(dirty))
 
 
 @pytest.mark.parametrize("cls", [UNetBaseline, ResNetUNet, HRNet, HoloPASWIN], ids=lambda cls: cls.__name__)
@@ -311,6 +353,39 @@ def test_a_bare_checkpoint_is_read_as_holopaswin(tmp_path: pathlib.Path) -> None
     model: nn.Module = build_model(ModelSettings(pretrained=False), geometry)
     torch.save(model.state_dict(), tmp_path / "plain.pth")
     assert isinstance(resolve_model(tmp_path / "plain.pth", geometry, torch.device("cpu")), HoloPASWIN)
+
+
+@pytest.mark.parametrize("version", [None, WIRING_VERSION - 1])
+def test_a_checkpoint_of_another_skip_wiring_is_rejected(tmp_path: pathlib.Path, version: int | None) -> None:
+    """Weights trained with another number of skips around the Swin U-Net load without error but reconstruct wrongly.
+
+    The skips have no weights, so only the stored wiring version tells the
+    generations apart; a checkpoint without it (None) or with an older one
+    must be refused, both bare and in a run folder.
+
+    Args:
+        tmp_path (pathlib.Path): Folder for the checkpoints.
+        version (int | None): Stored wiring version, or None to leave it out.
+    """
+    write_recipe(tmp_path / "run")
+    (tmp_path / "run" / "config.toml").write_text(config_to_toml(config_from_dict({"model": {"pretrained": False}})))
+    geometry: Geometry = read_geometry(tmp_path / "run")
+    state: dict[str, torch.Tensor] = build_model(ModelSettings(pretrained=False), geometry).state_dict()
+    if version is None:
+        del state["wiring_version"]
+    else:
+        state["wiring_version"] = torch.tensor(version)
+    torch.save(state, tmp_path / "run" / "model.pth")
+    with pytest.raises(ValueError, match="skip wiring"):
+        resolve_model(tmp_path / "run" / "model.pth", geometry, torch.device("cpu"))
+    with pytest.raises(ValueError, match="skip wiring"):
+        load_run(tmp_path / "run", torch.device("cpu"))
+
+
+def test_a_checkpoint_records_the_current_skip_wiring() -> None:
+    """New HoloPASWIN weights carry the wiring version they were trained with."""
+    model: HoloPASWIN = HoloPASWIN(*GEOMETRY, use_pretrained=False)
+    assert int(model.state_dict()["wiring_version"]) == WIRING_VERSION
 
 
 def test_a_run_for_another_image_size_is_rejected(tmp_path: pathlib.Path) -> None:

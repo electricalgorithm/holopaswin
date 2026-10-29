@@ -146,8 +146,8 @@ def test_doubled_amplitude_gives_an_amplitude_psnr_near_1_6_db() -> None:
 
     The phase is untouched, so its PSNR stays infinite. An amplitude PSNR near
     1.6 dB next to a high phase PSNR therefore points to a global amplitude scale
-    of about 2 between prediction and truth, such as the back-propagated field
-    added once more than during training.
+    of about 2 between prediction and truth, such as a network output that adds
+    the back-propagated field to a field that already contains it.
     """
     truth: npt.NDArray[np.complex128] = cell_field()
     doubled: dict[str, float] = metrics_of(2 * truth, truth)

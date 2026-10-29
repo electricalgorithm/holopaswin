@@ -357,11 +357,11 @@ def test_a_bare_checkpoint_is_read_as_holopaswin(tmp_path: pathlib.Path) -> None
 
 @pytest.mark.parametrize("version", [None, WIRING_VERSION - 1])
 def test_a_checkpoint_of_another_skip_wiring_is_rejected(tmp_path: pathlib.Path, version: int | None) -> None:
-    """Weights trained with another number of skips around the Swin U-Net load without error but reconstruct wrongly.
+    """Weights of another skip wiring around the Swin U-Net would load without error and reconstruct wrongly.
 
-    The skips have no weights, so only the stored wiring version tells the
-    generations apart; a checkpoint without it (None) or with an older one
-    must be refused, both bare and in a run folder.
+    The skips have no weights, so only the stored wiring version distinguishes
+    the wirings; weights without it (None) or with another version must be
+    refused, both as a bare checkpoint and in a run folder.
 
     Args:
         tmp_path (pathlib.Path): Folder for the checkpoints.

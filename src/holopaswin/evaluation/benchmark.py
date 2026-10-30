@@ -193,7 +193,7 @@ def time_methods(  # noqa: PLR0913
     iterations: int,
     warmup: int,
     device: torch.device,
-) -> dict[str, list[dict[str, float]]]:
+) -> dict[str, list[dict[str, Any]]]:
     """Time the call of every method for several batch sizes, taking turns on every pass.
 
     A batch holds the given holograms in order, repeated when the batch is
@@ -208,10 +208,11 @@ def time_methods(  # noqa: PLR0913
         device (torch.device): Device of the methods.
 
     Returns:
-        dict[str, list[dict[str, float]]]: By method and batch size, the median
-            latency of one pass in ms and the throughput in holograms per second.
+        dict[str, list[dict[str, Any]]]: By method and batch size, the median
+            latency of one pass in ms, the throughput in holograms per second,
+            and every timed pass in ms, in order, for confidence intervals.
     """
-    rows: dict[str, list[dict[str, float]]] = {name: [] for name in methods}
+    rows: dict[str, list[dict[str, Any]]] = {name: [] for name in methods}
     batch_size: int
     with torch.no_grad():
         for batch_size in batch_sizes:
@@ -231,6 +232,7 @@ def time_methods(  # noqa: PLR0913
                         "batch_size": batch_size,
                         "latency_ms": latency * 1e3,
                         "holograms_per_second": batch_size / latency,
+                        "passes_ms": [seconds * 1e3 for seconds in timings[name]],
                     }
                 )
     return rows
@@ -261,7 +263,7 @@ def timed_frame(model: nn.Module, frame: Path, device: torch.device) -> tuple[fl
 
 def time_end_to_end(
     methods: dict[str, nn.Module], frames: list[Path], holograms: torch.Tensor, warmup: int, device: torch.device
-) -> dict[str, dict[str, float]]:
+) -> dict[str, dict[str, Any]]:
     """Time loading, normalising and reconstructing the same stored frames with every method, taking turns.
 
     Args:
@@ -273,10 +275,11 @@ def time_end_to_end(
         device (torch.device): Device of the methods.
 
     Returns:
-        dict[str, dict[str, float]]: By method, the number of frames timed and
-            the median time per frame in ms for loading, normalising and moving
-            to the device, for the reconstruction, and for both together. The
-            last is the median of the per-frame sums, not the sum of the medians.
+        dict[str, dict[str, Any]]: By method, the number of frames timed, the
+            median time per frame in ms for loading, normalising and moving to
+            the device, for the reconstruction, and for both together, and the
+            loading and reconstruction time of every frame in ms, in order. The
+            total is the median of the per-frame sums, not the sum of the medians.
     """
     load: dict[str, list[float]] = {name: [] for name in methods}
     reconstruct: dict[str, list[float]] = {name: [] for name in methods}
@@ -298,6 +301,8 @@ def time_end_to_end(
             "load_ms": float(np.median(load[name])) * 1e3,
             "model_ms": float(np.median(reconstruct[name])) * 1e3,
             "total_ms": float(np.median(np.add(load[name], reconstruct[name]))) * 1e3,
+            "load_ms_per_frame": [seconds * 1e3 for seconds in load[name]],
+            "model_ms_per_frame": [seconds * 1e3 for seconds in reconstruct[name]],
         }
         for name in methods
     }
@@ -371,7 +376,7 @@ def run_benchmark(  # noqa: PLR0913
     Returns:
         dict[str, Any]: The protocol and environment, and by method its
             parameter count, the timings per batch size under "model" and the
-            end-to-end timing.
+            end-to-end timing, each with the time of every timed pass.
 
     Raises:
         ValueError: If a batch size or the number of iterations is below 1, no
@@ -402,12 +407,12 @@ def run_benchmark(  # noqa: PLR0913
         },
         "methods": {},
     }
-    model_timings: dict[str, list[dict[str, float]]] = time_methods(
+    model_timings: dict[str, list[dict[str, Any]]] = time_methods(
         methods, holograms, batch_sizes, iterations, warmup, device
     )
     with tempfile.TemporaryDirectory() as folder:
         frames: list[Path] = write_frames(test_dir, size, iterations, Path(folder))
-        end_to_end: dict[str, dict[str, float]] = time_end_to_end(methods, frames, holograms, warmup, device)
+        end_to_end: dict[str, dict[str, Any]] = time_end_to_end(methods, frames, holograms, warmup, device)
     name: str
     method: nn.Module
     for name, method in methods.items():

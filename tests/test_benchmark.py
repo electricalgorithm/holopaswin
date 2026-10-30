@@ -93,17 +93,25 @@ def test_a_batch_cycles_through_the_given_holograms() -> None:
 
 
 def test_the_latency_is_the_median_of_the_timed_passes(monkeypatch: pytest.MonkeyPatch) -> None:
-    """With known clock ticks, warm-up passes are left out and the latency is the median, so 2 s of 1, 2 and 10.
+    """With known clock ticks, warm-up passes are left out, every timed pass is kept, and the latency is their median.
+
+    The warm-up pass reads no clock, so the six readings belong to the three
+    timed passes, which take 1, 2 and 10 s: the median is 2 s and the
+    throughput 0.5 holograms per second.
 
     Args:
         monkeypatch (pytest.MonkeyPatch): Replaces the clock.
     """
-    readings: Iterator[float] = iter([0.0, 100.0, 100.0, 101.0, 101.0, 103.0, 103.0, 113.0])
+    readings: Iterator[float] = iter([0.0, 1.0, 1.0, 3.0, 3.0, 13.0])
     monkeypatch.setattr(benchmark, "perf_counter", lambda: next(readings))
-    rows: dict[str, list[dict[str, float]]] = time_methods(
-        {"r": Recorder("r", [])}, torch.ones(1, 1, 4, 4), [1], iterations=3, warmup=1, device=torch.device("cpu")
+    recorder: Recorder = Recorder("r", [])
+    rows: dict[str, list[dict[str, Any]]] = time_methods(
+        {"r": recorder}, torch.ones(1, 1, 4, 4), [1], iterations=3, warmup=2, device=torch.device("cpu")
     )
-    assert rows["r"] == [{"batch_size": 1, "latency_ms": 2000.0, "holograms_per_second": 0.5}]
+    assert rows["r"] == [
+        {"batch_size": 1, "latency_ms": 2000.0, "holograms_per_second": 0.5, "passes_ms": [1000.0, 2000.0, 10000.0]}
+    ]
+    assert len(recorder.inputs) == 2 + 3
 
 
 def test_every_clock_reading_follows_a_synchronisation(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -215,7 +223,17 @@ def test_every_method_is_timed_with_the_same_protocol(tmp_path: pathlib.Path) ->
     for name, method in report["methods"].items():
         assert [row["batch_size"] for row in method["model"]] == [1, 2], name
         assert all(row["latency_ms"] > 0 for row in method["model"]), name
-        assert set(method["end_to_end"]) == {"holograms", "load_ms", "model_ms", "total_ms"}, name
+        assert all(len(row["passes_ms"]) == 2 for row in method["model"]), name
+        end_to_end: dict[str, Any] = method["end_to_end"]
+        assert set(end_to_end) == {
+            "holograms",
+            "load_ms",
+            "model_ms",
+            "total_ms",
+            "load_ms_per_frame",
+            "model_ms_per_frame",
+        }, name
+        assert len(end_to_end["load_ms_per_frame"]) == len(end_to_end["model_ms_per_frame"]) == 2, name
     assert report["methods"]["unet"]["parameters"] > 0
     assert report["methods"]["asm"]["parameters"] == 0
 
